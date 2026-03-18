@@ -8,11 +8,14 @@ import sys
 import uuid
 
 from typing import Optional
+from dotenv import load_dotenv
 
 from db import create_shared_connection, setup_aer_tables
 from agent import build_graph
 from logger import StepLogger
 from cli import cmd_inspect
+
+load_dotenv() # load environment variables from .env file, if it exists
 
 DB_PATH = "db.sqlite"
 

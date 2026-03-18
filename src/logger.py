@@ -19,7 +19,7 @@ def compute_input_hash(inputs: Any) -> str:
     return hashlib.sha256(input_json.encode()).hexdigest()[:16]
 
 def _extract_tool_name(payload: Dict[str, Any]) -> Optional[str]:
-    """Extract the tool name from the event payload if it exists.
+    """Extract the tool name from the a tools-node event payload if it exists.
 
     Args:
         payload (Dict[str, Any]): event payload
@@ -27,9 +27,15 @@ def _extract_tool_name(payload: Dict[str, Any]) -> Optional[str]:
     Returns:
         Optional[str]: tool name of `None` if no tool calls are found
     """
+    # either extract from `tool_call` (for tool calls made directly in the input)
+    tool_call = payload.get("tool_call")
+    if isinstance(tool_call, dict) and "name" in tool_call:
+        return tool_call.get("name")
+    
+    # or from the last message with a tool call (for tool calls made by the model in a message)
     messages = payload.get("messages", [])
     for message in reversed(messages): # find last message with a tool call
-        tool_calls = getattr(message, "tool_calls", None)
+        tool_calls = getattr(message, "tool_calls", None) if not isinstance(message, dict) else message.get("tool_calls", [])
         if tool_calls:
             first = tool_calls[0]
             if isinstance(first, dict):
