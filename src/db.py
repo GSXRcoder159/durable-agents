@@ -42,5 +42,18 @@ def setup_aer_tables(conn: sqlite3.Connection) -> None:
         );
         
         CREATE INDEX IF NOT EXISTS idx_events_run_step ON events (run_id, step_id);
+
+        CREATE TABLE IF NOT EXISTS tool_intents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            intent_hash TEXT NOT NULL UNIQUE,
+            tool_name TEXT NOT NULL,
+            args_json TEXT,
+            status TEXT NOT NULL DEFAULT 'PENDING',
+            result TEXT,
+            created_at TIMESTAMP DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+            completed_at TEXT
+        );
+        
+        CREATE INDEX IF NOT EXISTS idx_tool_intents_hash ON tool_intents (intent_hash, status);
     """)
     conn.commit()
