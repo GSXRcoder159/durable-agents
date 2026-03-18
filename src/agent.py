@@ -5,6 +5,7 @@ from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from src.tools import ALL_TOOLS
+from src.idempotency import IdempotencyToolWrapper
 
 def build_graph(conn: sqlite3.Connection, model=None):
     """Build and return a compiled LangGraph ReAct agent graph.
@@ -21,4 +22,5 @@ def build_graph(conn: sqlite3.Connection, model=None):
     checkpointer = SqliteSaver(conn)
     checkpointer.setup() # creates `checkpoints` and `writes` tables
 
-    return create_react_agent(model, ALL_TOOLS, checkpointer=checkpointer)
+    wrapped_tools = [IdempotencyToolWrapper(tool, conn) for tool in ALL_TOOLS]
+    return create_react_agent(model=model, tools=wrapped_tools, checkpointer=checkpointer)
