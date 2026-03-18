@@ -37,7 +37,7 @@ class IdempotencyToolWrapper(BaseTool):
     conn: Any
 
     def __init__(self, wrapped_tool: BaseTool, conn: Any, **kwargs: Any) -> None:
-        super().__init__(name=wrapped_tool.name, desscription=wrapped_tool.description,
+        super().__init__(name=wrapped_tool.name, description=wrapped_tool.description,
                          args_schema=wrapped_tool.args_schema, wrapped_tool=wrapped_tool,
                          conn=conn, **kwargs)
 
