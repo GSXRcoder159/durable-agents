@@ -10,17 +10,17 @@ import uuid
 from typing import Optional
 from dotenv import load_dotenv
 
-from db import create_shared_connection, setup_aer_tables
-from agent import build_graph
-from logger import StepLogger
-from cli import cmd_inspect
+from src.db import create_shared_connection, setup_aer_tables
+from src.agent import build_graph
+from src.logger import StepLogger
+from src.cli import cmd_inspect
 
 load_dotenv() # load environment variables from .env file, if it exists
 
 DB_PATH = "db.sqlite"
 
 _DEFAULT_MESSAGE = (
-    "Search for 'LangGraph crash recover' and write a summary of the top result. Then write the summary to the database with record ID 'summary-001'."
+    "Search for 'LangGraph ReAct agent' and write a summary of the top result. Then write the summary to the database with record ID 'summary-001'."
 )
 
 def cmd_run(input_message: Optional[str] = None) -> None:

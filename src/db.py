@@ -11,7 +11,9 @@ def create_shared_connection(db_path: str) -> sqlite3.Connection:
         sqlite3.Connection: Shared connection configured for WAL mode,
             normal synchronous, and a busy timeout of 5000ms.
     """
-    conn = sqlite3.connect(db_path)
+    # LangGraph checkpointers may write checkpoints from worker threads.
+    # Allow this shared connection to be used across threads.
+    conn = sqlite3.connect(db_path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
@@ -30,7 +32,8 @@ def setup_aer_tables(conn: sqlite3.Connection) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             run_id TEXT NOT NULL,
             step_id INTEGER NOT NULL,
-            tool_name TEXT NOT NULL,
+            step_type TEXT NOT NULL,
+            tool_name TEXT,
             input_hash TEXT,
             output TEXT,
             status TEXT NOT NULL DEFAULT 'PENDING',

@@ -78,7 +78,7 @@ class StepLogger:
                 input_hash = compute_input_hash(payload.get("input"))
                 cursor = self.conn.execute(
                     "INSERT INTO events (run_id, step_id, step_type, tool_name, input_hash, status) VALUES (?, ?, ?, ?, ?, ?)",
-                    (thread_id, payload.get("step"), step_type, tool_name, input_hash, "PENDING")
+                    (thread_id, event.get("step"), step_type, tool_name, input_hash, "PENDING")
                 )
                 self.conn.commit()
                 task_id = payload.get("id", "")
