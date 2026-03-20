@@ -1,6 +1,15 @@
 """Shared SQLite connection factory."""
 import sqlite3
 
+# Events table statuses
+EVENT_STATUS_PENDING = "PENDING"
+EVENT_STATUS_COMPLETED = "COMPLETED"
+EVENT_STATUS_ERROR = "ERROR"
+
+# Tool intents table statuses
+TOOL_INTENT_STATUS_PENDING = "PENDING"
+TOOL_INTENT_STATUS_COMPLETED = "COMPLETED"
+
 def create_shared_connection(db_path: str) -> sqlite3.Connection:
     """Return a WAL-mode sqlite3.Connection.
 
@@ -27,7 +36,7 @@ def setup_aer_tables(conn: sqlite3.Connection) -> None:
     Args:
         conn (sqlite3.Connection): The database connection.
     """ 
-    conn.executescript("""
+    conn.executescript(f"""
         CREATE TABLE IF NOT EXISTS events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             run_id TEXT NOT NULL,
@@ -36,7 +45,7 @@ def setup_aer_tables(conn: sqlite3.Connection) -> None:
             tool_name TEXT,
             input_hash TEXT,
             output TEXT,
-            status TEXT NOT NULL DEFAULT 'PENDING',
+            status TEXT NOT NULL DEFAULT '{EVENT_STATUS_PENDING}',
             created_at TIMESTAMP DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
             completed_at TEXT
         );
@@ -48,7 +57,7 @@ def setup_aer_tables(conn: sqlite3.Connection) -> None:
             intent_hash TEXT NOT NULL UNIQUE,
             tool_name TEXT NOT NULL,
             args_json TEXT,
-            status TEXT NOT NULL DEFAULT 'PENDING',
+            status TEXT NOT NULL DEFAULT '{TOOL_INTENT_STATUS_PENDING}',
             result TEXT,
             created_at TIMESTAMP DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
             completed_at TEXT

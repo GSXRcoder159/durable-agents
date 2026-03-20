@@ -13,6 +13,7 @@ Usage:
 import os
 import uuid
 import sys
+from dotenv import load_dotenv
 
 # add src/ to path so we can import modules from it
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -21,6 +22,8 @@ from src.harness import inject_crash_at_step
 from src.recovery import cmd_recover
 from src.db import create_shared_connection, setup_aer_tables
 from src.cli import cmd_inspect
+
+load_dotenv()  # load environment variables
 
 CRASH_AT_STEP = 2
 DB_PATH = "demo_db.sqlite"

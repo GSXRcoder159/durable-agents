@@ -3,10 +3,10 @@ import hashlib
 import json
 
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, Type
+from typing import Any, Dict
 
 from langchain_core.tools import BaseTool
-from pydantic import BaseModel
+from src.db import TOOL_INTENT_STATUS_PENDING, TOOL_INTENT_STATUS_COMPLETED
 
 def compute_intent_hash(tool_name: str, args: Dict[str, Any]) -> str:
     """Return a deterministic hash for a tool call. The hash is key-order invariant and unique per (tool_name, args) pair.
@@ -47,7 +47,8 @@ class IdempotencyToolWrapper(BaseTool):
 
         # Cache hit - return chached result immediately
         row = self.conn.execute(
-            "SELECT result FROM tool_intents WHERE intent_hash = ? AND status = 'COMPLETED'", (intent_hash,)
+            "SELECT result FROM tool_intents WHERE intent_hash = ? AND status = ?",
+            (intent_hash, TOOL_INTENT_STATUS_COMPLETED)
         ).fetchone()
         if row is not None:
             return row[0]
@@ -56,8 +57,8 @@ class IdempotencyToolWrapper(BaseTool):
         now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%f") + "Z"
         args_json = json.dumps(kwargs, sort_keys=True, separators=(',', ':'), default=str)
         self.conn.execute(
-            "INSERT OR IGNORE INTO tool_intents (intent_hash, tool_name, args_json, status, created_at) VALUES (?, ?, ?, 'PENDING', ?)",
-            (intent_hash, self.name, args_json, now_iso)
+            "INSERT OR IGNORE INTO tool_intents (intent_hash, tool_name, args_json, status, created_at) VALUES (?, ?, ?, ?, ?)",
+            (intent_hash, self.name, args_json, TOOL_INTENT_STATUS_PENDING, now_iso)
         )
         self.conn.commit()
 
@@ -67,9 +68,9 @@ class IdempotencyToolWrapper(BaseTool):
         # TODO: str(result) is lossy for non-string return types. For tools that return other types
         # serialize with json.dumps and deserialize on cache hit.
         self.conn.execute(
-            """UPDATE tool_intents SET result = ?, status = 'COMPLETED', completed_at = ?
+            """UPDATE tool_intents SET result = ?, status = ?, completed_at = ?
             WHERE intent_hash = ?""",
-            (str(result), completed_at, intent_hash)
+            (str(result), TOOL_INTENT_STATUS_COMPLETED, completed_at, intent_hash)
         )
         self.conn.commit()
 

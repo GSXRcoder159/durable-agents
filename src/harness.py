@@ -8,8 +8,10 @@ import time
 from langchain_core.tools import BaseTool
 from typing import Any, Optional
 
+from src.db import EVENT_STATUS_COMPLETED
+
 def inject_crash_at_step(run_id: str, step_id: int, db_path: str = "db.sqlite") -> int:
-    """Spawn agent subprocess and SIGKILL it at step_id COMPLETE rows.
+    """Spawn agent subprocess and SIGKILL it at step_id COMPLETED rows.
 
     Args:
         run_id (str): The run ID to target for fault injection 
@@ -27,7 +29,7 @@ def inject_crash_at_step(run_id: str, step_id: int, db_path: str = "db.sqlite") 
     else:
         new_pythonpath = src_dir
     
-    env = {**os.environ, "PYTHONPATH": new_pythonpath}
+    env = {**os.environ, "PYTHONPATH": new_pythonpath, "DB_PATH": db_path}
     proc = subprocess.Popen([sys.executable, "-m", "src", "run", run_id], 
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
     
@@ -48,7 +50,10 @@ def inject_crash_at_step(run_id: str, step_id: int, db_path: str = "db.sqlite") 
     try:
         while proc.poll() is None:
             # Check for the number of completed steps
-            row = conn.execute("SELECT COUNT(*) FROM events WHERE run_id = ? AND status = 'COMPLETED'", (run_id)).fetchone()
+            row = conn.execute(
+                "SELECT COUNT(*) FROM events WHERE run_id = ? AND status = ?",
+                (run_id, EVENT_STATUS_COMPLETED)
+            ).fetchone()
             completed_steps = row[0] if row else 0
 
             if completed_steps >= step_id:

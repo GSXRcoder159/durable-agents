@@ -5,6 +5,7 @@ import sqlite3
 
 from langgraph.graph.state import CompiledStateGraph, RunnableConfig
 from typing import Any, Dict, Optional
+from src.db import EVENT_STATUS_PENDING, EVENT_STATUS_COMPLETED, EVENT_STATUS_ERROR
 
 def compute_input_hash(inputs: Any) -> str:
     """Compute a hash of the inputs serialized as JSON.
@@ -78,7 +79,7 @@ class StepLogger:
                 input_hash = compute_input_hash(payload.get("input"))
                 cursor = self.conn.execute(
                     "INSERT INTO events (run_id, step_id, step_type, tool_name, input_hash, status) VALUES (?, ?, ?, ?, ?, ?)",
-                    (thread_id, event.get("step"), step_type, tool_name, input_hash, "PENDING")
+                    (thread_id, event.get("step"), step_type, tool_name, input_hash, EVENT_STATUS_PENDING)
                 )
                 self.conn.commit()
                 task_id = payload.get("id", "")
@@ -90,7 +91,7 @@ class StepLogger:
                 if row_id is not None:
                     result = payload.get("result")
                     output_str = json.dumps(result, default=str)[:4096] # truncate to fit in database
-                    new_status = "ERROR" if payload.get("error") else "COMPLETE"
+                    new_status = EVENT_STATUS_ERROR if payload.get("error") else EVENT_STATUS_COMPLETED
                     self.conn.execute(
                         """UPDATE events SET output = ?, status = ?, completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                         WHERE id = ?""",
