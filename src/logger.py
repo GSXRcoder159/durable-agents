@@ -6,6 +6,7 @@ import sqlite3
 from langgraph.graph.state import CompiledStateGraph, RunnableConfig
 from typing import Any, Dict, Optional
 from src.db import EVENT_STATUS_PENDING, EVENT_STATUS_COMPLETED, EVENT_STATUS_ERROR
+from src.callbacks import LLMCallCounter
 
 def compute_input_hash(inputs: Any) -> str:
     """Compute a hash of the inputs serialized as JSON.
@@ -113,7 +114,9 @@ class StepLogger:
         Returns:
             Optional[str]: Serialized result of the last executed graph node, or `None` if no nodes were executed
         """
-        config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
+        llm_counter = LLMCallCounter()
+        config: RunnableConfig = {"configurable": {"thread_id": thread_id}, "callbacks": [llm_counter]}
         events = graph.stream({"messages": [("user", input_message)]}, config, stream_mode="debug", durability="sync")
-        return self.process_events(events, thread_id)
-    
+        result = self.process_events(events, thread_id)
+        print(f"Total LLM calls: {llm_counter.get_call_count()}")
+        return result
