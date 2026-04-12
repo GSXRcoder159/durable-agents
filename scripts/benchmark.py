@@ -94,11 +94,6 @@ def main() -> None:
     cmd_inspect(run_id, conn)
     conn.close()
 
-    print("\n==================================================")
-    print("Benchmark Baseline Complete.")
-    print("If you see 12+ steps above, your benchmark task is ready!")
-    print("==================================================")
-
     
     print("\n[Agent] Starting fault injection test at step 6...")
     return_code = inject_crash_at_step(run_id, step_id=6, db_path=DB_PATH)
