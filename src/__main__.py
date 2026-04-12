@@ -23,7 +23,7 @@ load_dotenv() # load environment variables from .env file, if it exists
 
 DB_PATH = os.getenv("DB_PATH") or "db.sqlite"
 
-_DEFAULT_MESSAGE = (
+_DEFAULT_MESSAGE = os.getenv("AGENT_PROMPT") or (
     "Search for 'LangGraph ReAct agent' and write a summary of the top result. Then write the summary to the database with record ID 'summary-001'."
 )
 

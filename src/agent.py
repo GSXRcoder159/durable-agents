@@ -16,8 +16,12 @@ def build_graph(conn: sqlite3.Connection, model=None):
             If None, `ChatOpenAI(model="gpt-4.1-mini", temperature=0)` will be used.
     """
     if model is None:
-        from langchain_openai import ChatOpenAI # requires Openai API key in environment
-        model = ChatOpenAI(model="gpt-4.1-mini", temperature=0)
+
+        #from langchain_openai import ChatOpenAI # requires Openai API key in environment
+        #model = ChatOpenAI(model="gpt-4.1-mini", temperature=0)
+
+        from langchain_google_genai import ChatGoogleGenerativeAI 
+        model = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0)
     
     checkpointer = SqliteSaver(conn)
     checkpointer.setup() # creates `checkpoints` and `writes` tables

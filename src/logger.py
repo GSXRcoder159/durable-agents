@@ -113,7 +113,9 @@ class StepLogger:
         Returns:
             Optional[str]: Serialized result of the last executed graph node, or `None` if no nodes were executed
         """
-        config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
+        config: RunnableConfig = {"configurable": {"thread_id": thread_id},
+                                  "recursion_limit": 25}
+        
         events = graph.stream({"messages": [("user", input_message)]}, config, stream_mode="debug", durability="sync")
         return self.process_events(events, thread_id)
     

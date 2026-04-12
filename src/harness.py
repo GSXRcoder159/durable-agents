@@ -65,6 +65,11 @@ def inject_crash_at_step(run_id: str, step_id: int, db_path: str = "db.sqlite") 
     finally:
         conn.close()
     
+    if proc.returncode == 0:
+        stdout, stderr = proc.communicate()
+        print("\n[DEBUG] Agent execution output:")
+        print(stdout.decode())
+
     return proc.returncode
 
 class FaultInjectionWrapper(BaseTool):
