@@ -76,7 +76,7 @@ class FaultInjectionWrapper(BaseTool):
     """Tool wrapper that raises a fault exception at tool call N.
     
     Args:
-        fault_type (Optional[str]): 'timeout' | 'tool_error'
+        fault_type (Optional[str]): 'timeout' | 'tool_error' | 'rate_limit'
         call_number (int): the tool call number at which to raise the fault (1-indexed)
     """
     model_config = {"arbitrary_types_allowed": True}
@@ -100,5 +100,7 @@ class FaultInjectionWrapper(BaseTool):
                 raise TimeoutError(f"[FAULT] Simulated API timeout at call {count} of tool {self.name}")
             elif self.fault_type == "tool_error":
                 raise RuntimeError(f"[FAULT] Simulated tool error at call {count} of tool {self.name}")
+            elif self.fault_type == "rate_limit":
+                raise RuntimeError(f"[FAULT] Simulated rate limit at call {count} of tool {self.name}")
         
         return self.wrapped_tool.run(*args, **kwargs)

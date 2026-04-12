@@ -6,6 +6,7 @@ import sqlite3
 from langgraph.graph.state import CompiledStateGraph, RunnableConfig
 from typing import Any, Dict, Optional
 from src.db import EVENT_STATUS_PENDING, EVENT_STATUS_COMPLETED, EVENT_STATUS_ERROR
+from src.callbacks import AgentMetricsHandler
 
 def compute_input_hash(inputs: Any) -> str:
     """Compute a hash of the inputs serialized as JSON.
@@ -113,9 +114,14 @@ class StepLogger:
         Returns:
             Optional[str]: Serialized result of the last executed graph node, or `None` if no nodes were executed
         """
-        config: RunnableConfig = {"configurable": {"thread_id": thread_id},
+        metrics = AgentMetricsHandler()
+        config: RunnableConfig = {"configurable": {"thread_id": thread_id}, "callbacks": [metrics],
                                   "recursion_limit": 25}
         
         events = graph.stream({"messages": [("user", input_message)]}, config, stream_mode="debug", durability="sync")
-        return self.process_events(events, thread_id)
-    
+        result = self.process_events(events, thread_id)
+        summary = metrics.get_summary()
+        print(f"--- Run Metrics ---")
+        print(f"Total Calls: {summary['call_count']}")
+        print(f"Total Tokens: {summary['total_tokens']} ({summary['prompt_tokens']} in, {summary['completion_tokens']} out)")
+        return result
