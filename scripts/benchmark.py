@@ -23,6 +23,7 @@ from src.cli import cmd_inspect
 from src.harness import inject_crash_at_step
 from src.recovery import cmd_recover
 from src.tools import get_call_counts, reset_call_counts
+from src.db import get_db_size_kb
 
 load_dotenv()
 
@@ -44,11 +45,6 @@ Task Sequence:
 7. After the database write is complete, output the exact string: "BENCHMARK_COMPLETE: Nexus_Report_001 saved."
 """
 
-def get_db_size_kb(path: str) -> float:
-    """Helper to record db size in KB"""
-    if os.path.exists(path):
-        return os.path.getsize(path) / 1024.0
-    return 0.0
 
 def main() -> None:
     # Generate a unique run_id for this benchmark run (start with "bench-" prefix for easy identification in the DB)
