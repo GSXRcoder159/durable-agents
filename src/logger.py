@@ -2,6 +2,7 @@
 import hashlib
 import json
 import sqlite3
+from unittest import result
 
 from langgraph.graph.state import CompiledStateGraph, RunnableConfig
 from typing import Any, Dict, Optional
@@ -103,7 +104,7 @@ class StepLogger:
         
         return last_result
 
-    def run(self, graph: CompiledStateGraph, input_message: str, thread_id: str) -> Optional[str]:
+    def run(self, graph: CompiledStateGraph, input_message: str, thread_id: str) -> dict:
         """Stream `graph` with debug events and log step.
 
         Args:
@@ -119,9 +120,7 @@ class StepLogger:
                                   "recursion_limit": 25}
         
         events = graph.stream({"messages": [("user", input_message)]}, config, stream_mode="debug", durability="sync")
-        result = self.process_events(events, thread_id)
-        summary = metrics.get_summary()
-        print(f"--- Run Metrics ---")
-        print(f"Total Calls: {summary['call_count']}")
-        print(f"Total Tokens: {summary['total_tokens']} ({summary['prompt_tokens']} in, {summary['completion_tokens']} out)")
-        return result
+        self.process_events(events, thread_id)
+        final_state = graph.get_state(config).values
+        
+        return final_state

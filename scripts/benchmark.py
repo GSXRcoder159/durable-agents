@@ -13,6 +13,7 @@ import sys
 import uuid
 import subprocess
 import sqlite3
+import time
 from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -21,11 +22,12 @@ from src.db import create_shared_connection, setup_aer_tables
 from src.cli import cmd_inspect
 from src.harness import inject_crash_at_step
 from src.recovery import cmd_recover
-
+from src.tools import get_call_counts, reset_call_counts
 
 load_dotenv()
 
-DB_PATH = "benchmark_db.sqlite"
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_PATH = os.path.join(PROJECT_ROOT, "benchmark_db.sqlite")
 
 BENCHMARK_PROMPT = """
 You are a benchmark testing agent running at temperature=0. 
@@ -50,7 +52,7 @@ def get_db_size_kb(path: str) -> float:
 
 def main() -> None:
     # Generate a unique run_id for this benchmark run (start with "bench-" prefix for easy identification in the DB)
-    run_id = f"bench-{uuid.uuid4().hex[:8]}"
+    run_id_base = f"bench-base-{uuid.uuid4().hex[:6]}"
     
     # Making sure we start with a clean slate for the benchmark
     if os.path.exists(DB_PATH):
@@ -58,7 +60,7 @@ def main() -> None:
 
     print("==================================================")
     print(f"Starting Benchmark Baseline Test")
-    print(f"Run ID:  {run_id}")
+    print(f"Run ID:  {run_id_base}")
     print(f"DB Path: {DB_PATH}")
     print("==================================================\n")
 
@@ -68,39 +70,41 @@ def main() -> None:
     env = os.environ.copy()
     env["AGENT_PROMPT"] = BENCHMARK_PROMPT
     env["DB_PATH"] = DB_PATH  
-
-    print("\n[Agent] Starting agent subprocess (Baseline run, no crash)...")
     
+    reset_call_counts()
+
     # 2. Run the Agent
+    print("\n[Agent] Starting agent subprocess (Baseline run, no crash)...")
+    start_time = time.perf_counter()
     try:
-        proc = subprocess.run(
-            [sys.executable, "-m", "src", "run", run_id],
+        subprocess.run(
+            [sys.executable, "-m", "src", "run", run_id_base],
             env=env,
+            cwd=PROJECT_ROOT,
             check=True
         )
         print("\n[Agent] Subprocess finished successfully.")
     except subprocess.CalledProcessError as e:
         print(f"\n[Error] Agent crashed unexpectedly with code {e.returncode}.")
         sys.exit(1)
+    
+    end_time = time.perf_counter()
+    wall_clock_time = end_time - start_time
 
-    # 3. Get the final DB size after the run to measure storage overhead
+    # Get the final DB size after the run to measure storage overhead
     final_size = get_db_size_kb(DB_PATH)
     print(f"\n[Storage] Final DB Size: {final_size:.2f} KB")
+    print(f"[Time] Wall-clock time: {wall_clock_time:.2f} seconds")
     
     # Verifying step count
-    print(f"\n[Inspect] Verifying step count for run {run_id}...\n")
+    print(f"\n[Inspect] Verifying step count for run {run_id_base}...\n")
     conn = create_shared_connection(DB_PATH)
     setup_aer_tables(conn)
-    cmd_inspect(run_id, conn)
+    cmd_inspect(run_id_base, conn)
     conn.close()
 
-    
-    print("\n[Agent] Starting fault injection test at step 6...")
-    return_code = inject_crash_at_step(run_id, step_id=6, db_path=DB_PATH)
-    print(f"Crash return code: {return_code}")
-    cmd_recover(run_id, DB_PATH)
-    final_size_recovered = get_db_size_kb(DB_PATH)
-    print(f"[Storage] DB Size after recovery: {final_size_recovered:.2f} KB")
+    print("\n==================================================")
+    print("✅ Benchmark Baseline Complete.")
 
 if __name__ == "__main__":
     main()
