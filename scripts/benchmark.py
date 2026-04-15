@@ -20,8 +20,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from src.db import create_shared_connection, setup_aer_tables
 from src.cli import cmd_inspect
-from src.harness import inject_crash_at_step
-from src.recovery import cmd_recover
 from src.tools import get_call_counts, reset_call_counts
 from src.db import get_db_size_kb
 
@@ -30,19 +28,24 @@ load_dotenv()
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(PROJECT_ROOT, "benchmark_db.sqlite")
 
-BENCHMARK_PROMPT = """
+BENCHMARK_PROMPT = SHARED_PROMPT = """
 You are a benchmark testing agent running at temperature=0. 
-You MUST execute the following instructions strictly in sequential order. 
+You must complete the following objective. 
 CRITICAL RULE: You are forbidden from calling multiple tools at the same time. You must wait for the exact result of the previous tool before calling the next one.
 
-Task Sequence:
+Primary Tasks:
 1. Use [web_search] with the exact query: "Find the official URL for Project Nexus".
-2. Wait for the result. Then, use [extract_data] with the URL you just found, and request the field: "annual_report_link".
-3. Wait for the result. Then, use [extract_data] again with the "annual_report_link" you just found, and request the field: "executive_summary_text".
-4. Wait for the result. Then, use [summarize] to summarize the "executive_summary_text" you extracted.
-5. Wait for the result. Then, use [web_search] again with the query: "Market reactions to " followed by the summarized text.
-6. Wait for the result. Finally, use [write_to_database] to save the market reactions you found. Use the record_id: "Nexus_Report_001".
-7. After the database write is complete, output the exact string: "BENCHMARK_COMPLETE: Nexus_Report_001 saved."
+2. Use [extract_data] with the URL you just found, and request the field: "annual_report_link".
+3. Use [extract_data] again with the "annual_report_link", requesting the field: "executive_summary_text".
+4. Use [summarize] to summarize the "executive_summary_text".
+5. Use [web_search] again with the query: "Market reactions to " followed by the summarized text.
+6. Use [write_to_database] to save the market reactions. Use the record_id: "Nexus_Report_001".
+
+FAULT RECOVERY RULE (AUTONOMOUS RE-PLANNING):
+You are a highly intelligent agent. If a tool encounters a critical error (such as a TimeoutError), it means your current execution path is blocked. 
+DO NOT blindly retry the exact same tool immediately. You MUST autonomously figure out a different path or perform a different logical tool action to reset your state before trying the failed objective again.
+
+After the database write is successfully completed, output the exact string: "BENCHMARK_COMPLETE: Nexus_Report_001 saved."
 """
 
 
