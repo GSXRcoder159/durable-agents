@@ -20,6 +20,8 @@ def web_search(query: str) -> str:
     """Mock web search tool."""
     name = web_search.name
     _call_counts[name] = _call_counts.get(name, 0) + 1
+    # Track whether the tool is actually being executed or if it's was from cache
+    print(f"[REAL EXECUTION] Actually running web_search for: {query}")
     return f"[MOCK SEARCH] Search results for '{query}'"
 
 @tool
@@ -27,6 +29,7 @@ def extract_data(url: str, field: str) -> str:
     """Mock data extraction tool."""
     name = extract_data.name
     _call_counts[name] = _call_counts.get(name, 0) + 1
+    print(f"[REAL EXECUTION] Actually running extract_data for: {url}")
     return f"[MOCK EXTRACT] Extracted '{field}' from '{url}'"
 
 @tool
@@ -34,6 +37,7 @@ def summarize(text: str) -> str:
     """Mock summarization tool."""
     name = summarize.name
     _call_counts[name] = _call_counts.get(name, 0) + 1
+    print(f"[REAL EXECUTION] Actually running summarize for: {text}")
     return f"[MOCK SUMMARIZE] Summary of '{text}'"
 
 @tool

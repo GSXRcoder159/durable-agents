@@ -93,29 +93,35 @@ class FaultInjectionWrapper(BaseTool):
     
     def _run(self, *args: Any, **kwargs: Any) -> Any:
         
-        
-        count = self._call_count + 1
+        count = getattr(self, "_call_count", 0) + 1
         object.__setattr__(self, "_call_count", count)
+
+        count_to_check = count 
 
         is_exp3 = os.environ.get("EXP3_POSITION_MODE") == "true"
         
         if is_exp3:
-            # 從 SQLite 讀取目前的「全域步數」
             db_path = os.environ.get("DB_PATH", "db.sqlite")
             run_id = os.environ.get("CURRENT_RUN_ID", "default")
             try:
                 with sqlite3.connect(db_path) as conn:
                     res = conn.execute("SELECT COUNT(*) FROM events WHERE run_id = ?", (run_id,)).fetchone()
-                    count_to_check = res[0] if res else 0
+                    count_to_check = res[0] if res else count
             except:
-                count_to_check = count # 萬一讀不到，就用原本的
+                count_to_check = count
+                
+        # Print out the current step count and the trap step for debugging and calibration purposes
+        print(f"[RADAR] '{self.name}' called. Current Global Step: {count_to_check}, Trap set at: {self.call_number}")
 
-        if count_to_check == self.call_number:
+        if str(count_to_check) == str(self.call_number):
+            print(f"[POSITION N TRAP] Triggering at Global Step: {count_to_check}")
+            
             if self.fault_type == "timeout":
-                raise TimeoutError(f"[FAULT] Simulated API timeout at call {count} of tool {self.name}")
+                raise TimeoutError(f"[FAULT] Simulated API timeout at call {count_to_check} of tool {self.name}")
             elif self.fault_type == "tool_error":
-                raise RuntimeError(f"[FAULT] Simulated tool error at call {count} of tool {self.name}")
+                raise RuntimeError(f"[FAULT] Simulated tool error at call {count_to_check} of tool {self.name}")
             elif self.fault_type == "rate_limit":
-                raise RuntimeError(f"[FAULT] Simulated rate limit at call {count} of tool {self.name}")
+                raise RuntimeError(f"[FAULT] Simulated rate limit at call {count_to_check} of tool {self.name}")
         
-        return self.wrapped_tool.run(*args, **kwargs)
+       
+        return self.wrapped_tool._run(*args, **kwargs)

@@ -16,7 +16,7 @@ def build_graph(conn: sqlite3.Connection, model=None):
     Args:
         conn (sqlite3.Connection): an open sqlite3.Connection
         model (Unknown, optional): a LangChain chat model. Defaults to None.
-            If None, `ChatOpenAI(model="gpt-4.1-mini", temperature=0)` will be used.
+            If None, `ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0)` will be used.
     """
     if model is None:
         from langchain_google_genai import ChatGoogleGenerativeAI 
@@ -29,9 +29,10 @@ def build_graph(conn: sqlite3.Connection, model=None):
 
     target_fault = os.environ.get("EXP3_TARGET_TOOL")
     if target_fault:
+        fault_call = int(os.environ.get("EXP3_FAULT_CALL", "1"))
         for i, tool in enumerate(base_tools):
             if tool.name == target_fault:
-                print(f"🔥 [Agent Builder] Wrapping '{tool.name}' with FaultInjectionWrapper for testing!")
+                print(f"[Agent Builder] Wrapping '{tool.name}' with FaultInjectionWrapper for testing!")
                 base_tools[i] = FaultInjectionWrapper(tool, fault_type="timeout", call_number=1)
 
     wrapped_tools = [IdempotencyToolWrapper(tool, conn) for tool in base_tools]
