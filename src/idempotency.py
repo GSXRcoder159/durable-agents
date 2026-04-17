@@ -57,21 +57,30 @@ class IdempotencyToolWrapper(BaseTool):
         now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%f") + "Z"
         args_json = json.dumps(kwargs, sort_keys=True, separators=(',', ':'), default=str)
         self.conn.execute(
-            "INSERT OR IGNORE INTO tool_intents (intent_hash, tool_name, args_json, status, created_at) VALUES (?, ?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO tool_intents (intent_hash, tool_name, args_json, status, created_at) VALUES (?, ?, ?, ?, ?)",
             (intent_hash, self.name, args_json, TOOL_INTENT_STATUS_PENDING, now_iso)
         )
         self.conn.commit()
 
-        result = self.wrapped_tool._run(*args, config=config, run_manager=run_manager, **kwargs)
+        try:
+            result = self.wrapped_tool._run(*args, config=config, run_manager=run_manager, **kwargs)
+            
+            completed_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%f") + "Z"
 
-        completed_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%f") + "Z"
-        # TODO: str(result) is lossy for non-string return types. For tools that return other types
-        # serialize with json.dumps and deserialize on cache hit.
-        self.conn.execute(
-            """UPDATE tool_intents SET result = ?, status = ?, completed_at = ?
-            WHERE intent_hash = ?""",
-            (str(result), TOOL_INTENT_STATUS_COMPLETED, completed_at, intent_hash)
-        )
-        self.conn.commit()
+            self.conn.execute(
+                """UPDATE tool_intents SET result = ?, status = ?, completed_at = ?
+                WHERE intent_hash = ?""",
+                (str(result), TOOL_INTENT_STATUS_COMPLETED, completed_at, intent_hash) # 這裡用你原本定義的 TOOL_INTENT_STATUS_COMPLETED
+            )
+            self.conn.commit()
+            
+            return result
 
-        return result
+        except Exception as e:
+            self.conn.execute(
+                "UPDATE tool_intents SET status = 'error' WHERE intent_hash = ?",
+                (intent_hash,)
+            )
+            self.conn.commit()
+            raise e
+

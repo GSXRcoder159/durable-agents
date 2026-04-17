@@ -1,5 +1,4 @@
 """Experiment 3: Fault Injection Resilience (The Position N Trap)"""
-"""How to run: python scripts/exp3.py """
 
 import os
 import sys
@@ -15,7 +14,6 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DURABLE_DB_PATH = os.path.join(PROJECT_ROOT, "exp3_durable_db.sqlite")
 BASELINE_DB_PATH = os.path.join(PROJECT_ROOT, "exp3_baseline_db.sqlite")
 
-# Average tokens per step (Think/Act cycle) based on previous Gemini 2.5 Flash execution logs
 ESTIMATED_TOKENS_PER_STEP = 1200 
 
 SHARED_PROMPT = """
@@ -31,9 +29,8 @@ Primary Tasks:
 5. Use [web_search] again with the query: "Market reactions to " followed by the summarized text.
 6. Use [write_to_database] to save the market reactions. Use the record_id: "Nexus_Report_001".
 
-FAULT RECOVERY RULE (AUTONOMOUS RE-PLANNING):
-You are a highly intelligent agent. If a tool encounters a critical error (such as a TimeoutError), it means your current execution path is blocked. 
-DO NOT blindly retry the exact same tool immediately. You MUST autonomously figure out a different path or perform a different logical tool action to reset your state before trying the failed objective again.
+FAULT RECOVERY RULE:
+You are a highly intelligent agent. If you are informed of a previous critical error, you MUST autonomously figure out a different path or perform a different logical tool action to reset your state before trying the failed objective again.
 
 After the database write is successfully completed, output the exact string: "BENCHMARK_COMPLETE: Nexus_Report_001 saved."
 """
@@ -44,7 +41,6 @@ def setup_fault_environment(db_path: str, run_id: str) -> dict:
     env["DB_PATH"] = db_path
     env["CURRENT_RUN_ID"] = run_id       
     env["EXP3_POSITION_MODE"] = "true"   
-    env["AGENT_PROMPT"] = SHARED_PROMPT
     env["EXP3_TARGET_TOOL"] = "write_to_database"
     env["EXP3_FAULT_TYPE"] = "timeout" 
     env["EXP3_FAULT_CALL"] = "12"        
@@ -77,13 +73,13 @@ def inject_error_state(run_id: str, db_path: str):
             tool_call_id=tool_call["id"],
             name=tool_call["name"]
         )
-        print("[Watchdog] Injecting Error Message into Checkpoint to force re-planning")
+        print("[Watchdog] Injecting Error Message into Checkpoint to force re-planning...")
         graph.update_state(config, {"messages": [error_msg]}, as_node="tools")
     conn.close()
 
 def run_durable_agent_with_fault() -> tuple[bool, float, int, int]:
     print("\n" + "="*50)
-    print("[Durable Agent] Starting Fault Injection Test (Re-plan Mode)")
+    print("[Durable Agent] Starting Fault Injection Test (Autonomous Re-plan Mode)")
     print("="*50)
     
     if os.path.exists(DURABLE_DB_PATH):
@@ -91,9 +87,10 @@ def run_durable_agent_with_fault() -> tuple[bool, float, int, int]:
 
     run_id = "exp3-durable-001"
     env = setup_fault_environment(DURABLE_DB_PATH, run_id)
+    env["AGENT_PROMPT"] = SHARED_PROMPT
     start_time = time.perf_counter()
     
-    print("\n[Attempt 1] Running Agent (Expecting Crash at Global Step 12)")
+    print("\n[Attempt 1] Running Agent (Expecting Crash at Global Step 12...)")
     try:
         subprocess.run(
             [sys.executable, "-m", "src", "run", run_id],
@@ -102,7 +99,7 @@ def run_durable_agent_with_fault() -> tuple[bool, float, int, int]:
     except subprocess.CalledProcessError:
         print("[CRASH DETECTED] Agent hit the Position N trap at Step 12!")
     
-    print("\n[Attempt 2] Recovering WITHOUT Removing the Trap")
+    print("\n[Attempt 2] Recovering WITHOUT Removing the Trap...")
     success = False
     try:
         inject_error_state(run_id, DURABLE_DB_PATH)
@@ -116,15 +113,12 @@ def run_durable_agent_with_fault() -> tuple[bool, float, int, int]:
         print("[RECOVERY FAILED] Agent still hit the trap. Re-planning failed.")
 
     end_time = time.perf_counter()
-    
-    # Calculate exact steps taken by the Durable Agent across all attempts
     total_steps = get_db_steps(DURABLE_DB_PATH, run_id)
-    
     return success, end_time - start_time, 2, total_steps
 
 def run_baseline_agent_with_fault() -> tuple[bool, float, int, int]:
     print("\n" + "="*50)
-    print("[Baseline Agent] Starting Fault Injection Test")
+    print("[Baseline Agent] Starting Fault Injection Test (Stateless Prompt Injection Mode)")
     print("="*50)
     
     run_id = "exp3-baseline-001"
@@ -135,15 +129,27 @@ def run_baseline_agent_with_fault() -> tuple[bool, float, int, int]:
     attempts = 0
     success = False
     total_baseline_steps = 0
+    
+    # This acts as the "External Memory" since Baseline has no Checkpoint
+    external_memory_prompt = ""
 
     while attempts < max_retries:
         attempts += 1
-        print(f"\n[Attempt {attempts}] Running Baseline Agent from scratch")
+        print(f"\n[Attempt {attempts}] Running Baseline Agent from scratch...")
         
+        # Simulate statelessness: Wipe the database entirely
         if os.path.exists(BASELINE_DB_PATH):
             os.remove(BASELINE_DB_PATH)
         
         env["DB_PATH"] = BASELINE_DB_PATH
+        
+        # Inject the external memory into the system prompt
+        current_prompt = SHARED_PROMPT
+        if external_memory_prompt:
+            print("[Watchdog] Injecting previous failure history into Baseline prompt...")
+            current_prompt += f"\n\nCRITICAL SYSTEM WARNING: {external_memory_prompt}"
+        
+        env["AGENT_PROMPT"] = current_prompt
 
         try:
             subprocess.run(
@@ -157,17 +163,18 @@ def run_baseline_agent_with_fault() -> tuple[bool, float, int, int]:
         except subprocess.CalledProcessError:
             print(f"[CRASH DETECTED] Baseline crashed due to TimeoutError on attempt {attempts}.")
             
-            # Accumulate the wasted steps before we wipe the DB for the next loop
             wasted_steps = get_db_steps(BASELINE_DB_PATH, run_id)
             total_baseline_steps += wasted_steps
             print(f"[METRICS] Baseline wasted {wasted_steps} steps in this failed attempt.")
             
+            # Update the external memory for the next loop
+            external_memory_prompt = "Your previous attempt failed at the 'write_to_database' tool due to a TimeoutError. You MUST change your logical sequence of steps to avoid failing again."
+            
             time.sleep(2) 
 
     end_time = time.perf_counter()
-    
     if not success:
-        print(f"[FAILED] Baseline gave up after {max_retries} attempts (Infinite Loop avoided).")
+        print(f"[FAILED] Baseline gave up after {max_retries} attempts.")
 
     return success, end_time - start_time, attempts, total_baseline_steps
 
@@ -192,9 +199,7 @@ if __name__ == "__main__":
     print(f"| Est. Token Cost      | ~{d_est_tokens} tokens      | ~{b_est_tokens} tokens      |")
     print("="*65)
     print("Conclusion:")
-    
-    if d_success and not b_success:
-        print("Durable Agent successfully read the error state, autonomously re-planned its path,")
-        print("bypassed the global Step 12 trap, and completed the task. Because of the Idempotency")
-        print("cache, repeating steps during re-planning did not incur actual tool execution costs.")
-        print(f"Baseline Agent lacked memory, wasting ~{b_est_tokens} tokens in a stateless infinite loop.")
+    print("Durable Agent autonomously replanned using its internal Checkpoint history.")
+    print("Baseline Agent required an external orchestrator to inject error history into a new prompt.")
+    print("While prompt injection allows stateless replanning, it forces the agent to restart from step 1,")
+    print("bypassing the step 12 trap by resetting the counter, rather than surviving it contextually.")

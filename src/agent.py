@@ -29,12 +29,18 @@ def build_graph(conn: sqlite3.Connection, model=None):
 
     target_fault = os.environ.get("EXP3_TARGET_TOOL")
     if target_fault:
-        fault_call = int(os.environ.get("EXP3_FAULT_CALL", "1"))
+        fault_call = int(os.environ.get("EXP3_FAULT_CALL", "12"))
+        fault_type = os.environ.get("EXP3_FAULT_TYPE", "timeout")
+        
         for i, tool in enumerate(base_tools):
             if tool.name == target_fault:
-                print(f"[Agent Builder] Wrapping '{tool.name}' with FaultInjectionWrapper for testing!")
-                base_tools[i] = FaultInjectionWrapper(tool, fault_type="timeout", call_number=1)
-
+                print(f"🔥 [Agent Builder] Wrapping '{tool.name}' with FaultInjectionWrapper at Step {fault_call}!")
+                base_tools[i] = FaultInjectionWrapper(
+                    tool, 
+                    fault_type=fault_type, 
+                    call_number=fault_call
+                )
+                
     wrapped_tools = [IdempotencyToolWrapper(tool, conn) for tool in base_tools]
     return create_react_agent(model=model, tools=wrapped_tools, checkpointer=checkpointer)
 

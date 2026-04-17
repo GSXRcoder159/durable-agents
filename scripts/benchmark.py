@@ -28,7 +28,7 @@ load_dotenv()
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(PROJECT_ROOT, "benchmark_db.sqlite")
 
-BENCHMARK_PROMPT = SHARED_PROMPT = """
+BENCHMARK_PROMPT = """
 You are a benchmark testing agent running at temperature=0. 
 You must complete the following objective. 
 CRITICAL RULE: You are forbidden from calling multiple tools at the same time. You must wait for the exact result of the previous tool before calling the next one.
