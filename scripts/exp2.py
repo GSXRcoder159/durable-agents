@@ -207,7 +207,7 @@ def main() -> None:
     lines = []
     lines.append("Experiment 2: Idempotency (Checkpoint-Crash Race Replay)")
     lines.append(f"generated_at: {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%f')}Z")
-    lines.append(f"db: {EXPERIMENT_DB}")
+    lines.append(f"db: exp2_idempotency.sqlite")
     lines.append(f"record_id: {RECORD_ID}")
     lines.append("")
     lines.append("Prompt:")

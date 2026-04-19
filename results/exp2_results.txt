@@ -1,6 +1,6 @@
 Experiment 2: Idempotency (Checkpoint-Crash Race Replay)
-generated_at: 2026-04-19T03:00:824559Z
-db: D:\Umich\2026.01-2026.04\CSE 585\project\durable-agents\scripts\exp2_idempotency.sqlite
+generated_at: 2026-04-19T03:04:570747Z
+db: exp2_idempotency.sqlite
 record_id: Nexus_Report_001
 
 Prompt:
@@ -19,21 +19,21 @@ Task Sequence:
 
 Per-run metrics:
 [baseline run1]
-Time: 0.064473s
+Time: 0.067350s
 LLM tool calls: 6
 Memory used: py_peak_mb=0.73
 Token used: 0
 write_to_database executions: 1
 
 [baseline run2]
-Time: 0.011849s
+Time: 0.012687s
 LLM tool calls: 6
 Memory used: py_peak_mb=0.03
 Token used: 0
 write_to_database executions: 1
 
 [cached run1]
-Time: 0.010668s
+Time: 0.006400s
 LLM tool calls: 6
 Memory used: py_peak_mb=0.01
 Token used: 0
@@ -41,7 +41,7 @@ write_to_database executions: 1
 intent_hash: 4961fb262d92046f7c1dac361b4529d7769f8d31e0cc57d91ef090f43279f77a
 
 [cached run2]
-Time: 0.004389s
+Time: 0.002799s
 LLM tool calls: 6
 Memory used: py_peak_mb=0.01
 Token used: 0
@@ -52,7 +52,7 @@ Baseline vs Cached:
 | Metric             | Baseline | Cached |
 |--------------------|----------|--------|
 | Total Attempts     | 2        | 2      |
-| Time (s)           | 0.076    | 0.015  |
+| Time (s)           | 0.080    | 0.009  |
 | LLM tool calls     | 12       | 12     |
 | Memory peak (MB)   | 0.73     | 0.01   |
 | Token used         | 0        | 0      |
