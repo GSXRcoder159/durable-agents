@@ -1,0 +1,64 @@
+Experiment 2: Idempotency (Checkpoint-Crash Race Replay)
+generated_at: 2026-04-19T03:00:824559Z
+db: D:\Umich\2026.01-2026.04\CSE 585\project\durable-agents\scripts\exp2_idempotency.sqlite
+record_id: Nexus_Report_001
+
+Prompt:
+You are a benchmark testing agent running at temperature=0.
+You MUST execute the following instructions strictly in sequential order.
+CRITICAL RULE: You are forbidden from calling multiple tools at the same time. You must wait for the exact result of the previous tool before calling the next one.
+
+Task Sequence:
+1. Use [web_search] with the exact query: "Find the official URL for Project Nexus".
+2. Wait for the result. Then, use [extract_data] with the URL you just found, and request the field: "annual_report_link".
+3. Wait for the result. Then, use [extract_data] again with the "annual_report_link" you just found, and request the field: "executive_summary_text".
+4. Wait for the result. Then, use [summarize] to summarize the "executive_summary_text" you extracted.
+5. Wait for the result. Then, use [web_search] again with the query: "Market reactions to " followed by the summarized text.
+6. Wait for the result. Finally, use [write_to_database] to save the market reactions you found. Use the record_id: "Nexus_Report_001".
+7. After the database write is complete, output the exact string: "BENCHMARK_COMPLETE: Nexus_Report_001 saved."
+
+Per-run metrics:
+[baseline run1]
+Time: 0.064473s
+LLM tool calls: 6
+Memory used: py_peak_mb=0.73
+Token used: 0
+write_to_database executions: 1
+
+[baseline run2]
+Time: 0.011849s
+LLM tool calls: 6
+Memory used: py_peak_mb=0.03
+Token used: 0
+write_to_database executions: 1
+
+[cached run1]
+Time: 0.010668s
+LLM tool calls: 6
+Memory used: py_peak_mb=0.01
+Token used: 0
+write_to_database executions: 1
+intent_hash: 4961fb262d92046f7c1dac361b4529d7769f8d31e0cc57d91ef090f43279f77a
+
+[cached run2]
+Time: 0.004389s
+LLM tool calls: 6
+Memory used: py_peak_mb=0.01
+Token used: 0
+write_to_database executions: 0
+intent_hash: 4961fb262d92046f7c1dac361b4529d7769f8d31e0cc57d91ef090f43279f77a
+
+Baseline vs Cached:
+| Metric             | Baseline | Cached |
+|--------------------|----------|--------|
+| Total Attempts     | 2        | 2      |
+| Time (s)           | 0.076    | 0.015  |
+| LLM tool calls     | 12       | 12     |
+| Memory peak (MB)   | 0.73     | 0.01   |
+| Token used         | 0        | 0      |
+| DB writes (actual) | 2        | 1      |
+
+Baseline write_to_database executions: [1, 1]
+Cached write_to_database executions:   [1, 0]
+Cached intent_hash: 4961fb262d92046f7c1dac361b4529d7769f8d31e0cc57d91ef090f43279f77a
+ok: True
