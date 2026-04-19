@@ -1,0 +1,25 @@
+Experiment 1: Crash Recovery
+generated_at: 2026-04-19T15:57:873863Z
+crash_step: 9
+num_runs: 3
+model: gpt-4.1-mini (temperature=0)
+
+Per-run metrics:
+  baseline run1: time=9.120s, db=0.03MB, llm_calls=13, tool_actual=12
+  baseline run2: time=12.719s, db=0.03MB, llm_calls=13, tool_actual=12
+  baseline run3: time=13.693s, db=0.03MB, llm_calls=13, tool_actual=12
+  durable run1: time=0.005s, db=0.12MB, llm_calls=4, tool_actual=3
+  durable run2: time=0.004s, db=0.12MB, llm_calls=4, tool_actual=3
+  durable run3: time=0.006s, db=0.12MB, llm_calls=4, tool_actual=3
+
+Averages:
+  Baseline : time=11.844s, db=0.03MB, llm_calls=13.0, tool_actual=12.0
+  Durable : time=0.005s, db=0.12MB, llm_calls=4.0, tool_actual=3.0
+
+Table:
+Metric                 | Baseline (full restart) | Durable (crash+recovery)
+-----------------------+-------------------------+-------------------------
+Time (s)               | 11.844                  | 0.005                   
+LLM calls              | 13.0                    | 4.0                     
+Actual tool executions | 12.0                    | 3.0                     
+DB size (MB)           | 0.03                    | 0.12                    
