@@ -42,29 +42,47 @@ def inject_crash_at_step(run_id: str, step_id: int, db_path: str = "db.sqlite") 
             raise TimeoutError(f"Subprocess did not create database file at {db_path} within 10 seconds.")
         if proc.poll() is not None:
             stdout, stderr = proc.communicate()
-            raise RuntimeError(f"Subprocess exited early with code {proc.returncode}.\nStdout: {stdout.decode()}\nStderr: {stderr.decode()}")
+            print("=== Subprocess exited early ===")
+            print("STDOUT:", stdout.decode() if stdout else "(empty)")
+            print("STDERR:", stderr.decode() if stderr else "(empty)")
+            raise RuntimeError(f"Subprocess exited with code {proc.returncode} before DB was created.")
         time.sleep(0.05)
-    
-    conn = sqlite3.connect(db_path)
 
-    try:
-        while proc.poll() is None:
-            # Check for the number of completed steps
+    # Poll the database for completed steps
+    last_error = None
+    while proc.poll() is None:
+        try:
+            # Use a fresh connection with a short timeout
+            conn = sqlite3.connect(db_path, timeout=1.0)
+            conn.row_factory = sqlite3.Row
             row = conn.execute(
                 "SELECT COUNT(*) FROM events WHERE run_id = ? AND status = ?",
                 (run_id, EVENT_STATUS_COMPLETED)
             ).fetchone()
             completed_steps = row[0] if row else 0
+            conn.close()
 
             if completed_steps >= step_id:
                 proc.kill()
                 proc.wait()
                 return proc.returncode
-            
-            time.sleep(0.01) # 10ms polling interval
-    finally:
-        conn.close()
-    
+        except sqlite3.OperationalError as e:
+            last_error = e
+            time.sleep(0.1)
+        except Exception as e:
+            last_error = e
+            time.sleep(0.1)
+
+        time.sleep(0.01)
+
+    # If we get here, the subprocess died on its own
+    stdout, stderr = proc.communicate()
+    print("=== Subprocess exited unexpectedly ===")
+    print(f"Return code: {proc.returncode}")
+    print("STDOUT:", stdout.decode() if stdout else "(empty)")
+    print("STDERR:", stderr.decode() if stderr else "(empty)")
+    if last_error:
+        print(f"Last SQLite error: {last_error}")
     return proc.returncode
 
 class FaultInjectionWrapper(BaseTool):
@@ -85,7 +103,7 @@ class FaultInjectionWrapper(BaseTool):
                          args_schema=wrapped_tool.args_schema, wrapped_tool=wrapped_tool,
                          fault_type=fault_type, call_number=call_number, **kwargs)
         object.__setattr__(self, "_call_count", 0)
-    
+
     def _run(self, *args: Any, **kwargs: Any) -> Any:
         count = self._call_count + 1
         object.__setattr__(self, "_call_count", count)
