@@ -4,7 +4,7 @@ import os
 import sqlite3
 
 from langgraph.prebuilt import create_react_agent
-from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.sqlite import SqliteSaver, SqliteSaverBase
 
 from src.tools import ALL_TOOLS
 from src.idempotency import IdempotencyToolWrapper
@@ -38,16 +38,20 @@ def build_graph(conn: sqlite3.Connection, model=None):
     wrapped_tools = [IdempotencyToolWrapper(tool, conn) for tool in base_tools]
     return create_react_agent(model=model, tools=wrapped_tools, checkpointer=checkpointer)
 
-def build_baseline_graph(model=None):
+def build_baseline_graph(conn: sqlite3.Connection, model=None):
     """Build a baseline ReAct agent graph with no checkpointing or idempotency.
 
     Args:
+        conn (sqlite3.Connection): an open sqlite3.Connection
         model (Unknown, optional): a LangChain chat model. Defaults to None.
             If None, `ChatOpenAI(model="gpt-4.1-mini", temperature=0)` will be used.
     """
     if model is None:
         from langchain_google_genai import ChatGoogleGenerativeAI 
         model = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0)
+
+    checkpointer = SqliteSaverBase(conn)
+    checkpointer.setup() # creates `checkpoints` and `writes` tables
 
     base_tools = list(ALL_TOOLS)
     
@@ -57,4 +61,4 @@ def build_baseline_graph(model=None):
             if tool.name == target_fault:
                 base_tools[i] = FaultInjectionWrapper(tool, fault_type="timeout", call_number=1)
 
-    return create_react_agent(model=model, tools=base_tools)
+    return create_react_agent(model=model, tools=base_tools, checkpointer=checkpointer)

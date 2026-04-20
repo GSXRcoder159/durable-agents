@@ -25,7 +25,7 @@ from src.cli import cmd_inspect
 
 load_dotenv()  # load environment variables
 
-CRASH_AT_STEP = 2
+CRASH_AT_STEP = 5
 DB_PATH = "demo_db.sqlite"
 
 def main() -> None:

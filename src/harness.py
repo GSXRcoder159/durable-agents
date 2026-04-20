@@ -10,13 +10,14 @@ from typing import Any, Optional
 
 from src.db import EVENT_STATUS_COMPLETED
 
-def inject_crash_at_step(run_id: str, step_id: int, db_path: str = "db.sqlite") -> int:
+def inject_crash_at_step(run_id: str, step_id: int, db_path: str = "db.sqlite", baseline: bool = False) -> int:
     """Spawn agent subprocess and SIGKILL it at step_id COMPLETED rows.
 
     Args:
         run_id (str): The run ID to target for fault injection 
         step_id (int): The step ID at which to inject the crash
         db_path (str, optional): The path to the SQLite database. Defaults to "db.sqlite".
+        baseline (bool, optional): Whether to run in baseline mode. Defaults to False.
 
     Returns:
         int: The subprocess return code
@@ -30,7 +31,11 @@ def inject_crash_at_step(run_id: str, step_id: int, db_path: str = "db.sqlite") 
         new_pythonpath = src_dir
     
     env = {**os.environ, "PYTHONPATH": new_pythonpath, "DB_PATH": db_path}
-    proc = subprocess.Popen([sys.executable, "-m", "src", "run", run_id], 
+    if baseline:
+        proc = subprocess.Popen([sys.executable, "-m", "src", "run", run_id, "True"], 
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+    else:
+        proc = subprocess.Popen([sys.executable, "-m", "src", "run", run_id], 
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
     
     # Wait for the subprocess to create and initialize the DB

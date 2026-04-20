@@ -14,7 +14,7 @@ from typing import Optional
 from dotenv import load_dotenv
 
 from src.db import create_shared_connection, setup_aer_tables
-from src.agent import build_graph
+from src.agent import build_graph, build_baseline_graph
 from src.logger import StepLogger
 from src.cli import cmd_inspect
 from src.recovery import cmd_recover
@@ -28,12 +28,13 @@ _DEFAULT_MESSAGE = os.getenv("AGENT_PROMPT") or (
     "Search for 'LangGraph ReAct agent' and write a summary of the top result. Then write the summary to the database with record ID 'summary-001'."
 )
 
-def cmd_run(input_message: Optional[str] = None, run_id: Optional[str] = None) -> None:
+def cmd_run(input_message: Optional[str] = None, run_id: Optional[str] = None, baseline: bool = False) -> None:
     """Run an agent and print step history.
 
     Args:
         input_message Optional[str]: The message to process. Defaults to None.
         run_id Optional[str]: The ID of the run. Defaults to None.
+        baseline (bool, optional): Whether to run in baseline mode. Defaults to False.
     """
     if run_id is None:
         run_id = str(uuid.uuid4()) # generate short random run ID
@@ -42,7 +43,7 @@ def cmd_run(input_message: Optional[str] = None, run_id: Optional[str] = None) -
     
     conn = create_shared_connection(DB_PATH)
     setup_aer_tables(conn)
-    graph = build_graph(conn)
+    graph = build_graph(conn) if not baseline else build_baseline_graph(conn)
     logger = StepLogger(conn)
 
     print(f"=== Running agent with run_id: {run_id} ===")
@@ -106,6 +107,9 @@ if __name__ == "__main__":
     elif len(sys.argv) == 3 and sys.argv[1] == "run":
         run_id = sys.argv[2]
         cmd_run(run_id=run_id)
+    elif len(sys.argv) == 4 and sys.argv[1] == "run" and sys.argv[3] == "True":
+        run_id = sys.argv[2]
+        cmd_run(run_id=run_id, baseline=True)
     elif len(sys.argv) == 1:
         cmd_run()
     else:

@@ -79,13 +79,35 @@ class StepLogger:
                 step_type = "act" if node_name == "tools" else "think"
                 tool_name = _extract_tool_name(payload.get("input", {})) if step_type == "act" else None
                 input_hash = compute_input_hash(payload.get("input"))
-                cursor = self.conn.execute(
-                    "INSERT INTO events (run_id, step_id, step_type, tool_name, input_hash, status) VALUES (?, ?, ?, ?, ?, ?)",
-                    (thread_id, event.get("step"), step_type, tool_name, input_hash, EVENT_STATUS_PENDING)
-                )
-                self.conn.commit()
+                # If this exact step already has a pending row (e.g., process crashed after
+                # writing PENDING but before task_result), reuse it on recovery.
+                step_id = event.get("step")
+                existing_pending_row = self.conn.execute(
+                    """SELECT id FROM events
+                       WHERE run_id = ? AND step_id = ? AND status = ?
+                       ORDER BY id DESC LIMIT 1""",
+                    (thread_id, step_id, EVENT_STATUS_PENDING),
+                ).fetchone()
+
+                if existing_pending_row is not None:
+                    row_id = existing_pending_row[0]
+                else:
+                    # If step_id already exists for this run (completed/error rows), the
+                    # graph is retrying, so allocate the next available step id.
+                    while self.conn.execute(
+                        "SELECT 1 FROM events WHERE run_id = ? AND step_id = ?",
+                        (thread_id, step_id),
+                    ).fetchone():
+                        step_id += 1
+                    cursor = self.conn.execute(
+                        "INSERT INTO events (run_id, step_id, step_type, tool_name, input_hash, status) VALUES (?, ?, ?, ?, ?, ?)",
+                        (thread_id, step_id, step_type, tool_name, input_hash, EVENT_STATUS_PENDING)
+                    )
+                    self.conn.commit()
+                    row_id = cursor.lastrowid  # pyright: ignore[reportArgumentType]
+
                 task_id = payload.get("id", "")
-                pending[task_id] = cursor.lastrowid # pyright: ignore[reportArgumentType]
+                pending[task_id] = row_id
             
             elif event_type == "task_result":
                 task_id = payload.get("id", "")
@@ -122,5 +144,4 @@ class StepLogger:
         events = graph.stream({"messages": [("user", input_message)]}, config, stream_mode="debug", durability="sync")
         self.process_events(events, thread_id)
         final_state = graph.get_state(config).values
-        
         return final_state
