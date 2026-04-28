@@ -7,23 +7,23 @@ below install the dependencies, check that the code compiles, and run the agent.
 
 1. Install the dependencies:
 
-   ```bash
-   uv sync
-   ```
+```bash
+uv sync
+```
 
 2. Add a `.env` file in the project root:
 
-   ```bash
-   GOOGLE_API_KEY=your_key_here
-   # Optional:
-   # DB_PATH=db.sqlite
-   ```
+```bash
+GOOGLE_API_KEY=your_key_here
+# Optional:
+# DB_PATH=db.sqlite
+```
 
 3. Run the agent:
 
-   ```bash
-   uv run python -m src
-   ```
+```bash
+uv run python -m src
+```
 
 Useful commands:
 
