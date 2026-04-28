@@ -15,6 +15,10 @@ def get_call_counts() -> dict[str, int]:
     """
     return dict(_call_counts)
 
+def get_invocation_counts() -> dict[str, int]:
+    """Backward-compatible alias used by the experiment scripts."""
+    return get_call_counts()
+
 @tool
 def web_search(query: str) -> str:
     """Mock web search tool."""

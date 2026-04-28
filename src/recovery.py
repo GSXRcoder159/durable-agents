@@ -1,5 +1,6 @@
 """Crash recovery entry point."""
 import os
+import uuid
 
 from langchain_core.runnables import RunnableConfig
 from typing import Any, Optional
@@ -47,7 +48,13 @@ def _looks_incomplete_terminal_state(values: Any) -> bool:
         and (finish_reason in {"STOP", "MALFORMED_FUNCTION_CALL"} or bool(invalid_tool_calls))
     )
 
-def cmd_recover_baseline(run_id: str, db_path: str = "db.sqlite", input_message: Optional[str] = None, _model=None):
+def cmd_recover_baseline(
+    run_id: str,
+    db_path: str = "db.sqlite",
+    input_message: Optional[str] = None,
+    _model=None,
+    rerun_thread_id: Optional[str] = None,
+):
     """Recover by rerunning the baseline graph from scratch."""
     conn = create_shared_connection(db_path)
     setup_aer_tables(conn)
@@ -62,7 +69,8 @@ def cmd_recover_baseline(run_id: str, db_path: str = "db.sqlite", input_message:
 
     # Use a fresh thread id so the rerun starts from scratch, but keep logging under
     # the original run_id so the baseline path shows crash + full rerun together.
-    rerun_thread_id = f"{run_id}::baseline-rerun"
+    if rerun_thread_id is None:
+        rerun_thread_id = f"{run_id}::baseline-rerun::{uuid.uuid4().hex[:8]}"
     config = RunnableConfig(configurable={"thread_id": rerun_thread_id}, recursion_limit=25)
 
     print(f"=== Baseline Recovery (re-run) with run_id: {run_id} ===")

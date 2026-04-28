@@ -17,7 +17,7 @@ from src.db import create_shared_connection, setup_aer_tables
 from src.agent import build_graph, build_baseline_graph
 from src.logger import StepLogger
 from src.cli import cmd_inspect
-from src.recovery import cmd_recover
+from src.recovery import cmd_recover, cmd_recover_baseline
 from src.tools import get_call_counts, reset_call_counts
 
 load_dotenv() # load environment variables from .env file, if it exists
@@ -104,6 +104,9 @@ if __name__ == "__main__":
     elif len(sys.argv) == 3 and sys.argv[1] == "recover":
         run_id = sys.argv[2]
         cmd_recover(run_id, DB_PATH)
+    elif len(sys.argv) == 3 and sys.argv[1] == "recover-baseline":
+        run_id = sys.argv[2]
+        cmd_recover_baseline(run_id, DB_PATH, rerun_thread_id=os.getenv("BASELINE_RERUN_THREAD_ID"))
     elif len(sys.argv) == 3 and sys.argv[1] == "run":
         run_id = sys.argv[2]
         cmd_run(run_id=run_id)
@@ -113,7 +116,10 @@ if __name__ == "__main__":
     elif len(sys.argv) == 1:
         cmd_run()
     else:
-        print("Usage: python -m src [run <run_id> | inspect <run_id> | recover <run_id>]")
+        print(
+            "Usage: python -m src "
+            "[run <run_id> | inspect <run_id> | recover <run_id> | recover-baseline <run_id>]"
+        )
         sys.exit(1)
     
     

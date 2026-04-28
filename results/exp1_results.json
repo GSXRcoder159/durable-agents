@@ -1,0 +1,132 @@
+{
+  "experiment": "exp1_crash_recovery",
+  "runs": 3,
+  "crash_step": 9,
+  "baseline": {
+    "recovery_mode": "full_rerun_from_start",
+    "trials": [
+      {
+        "run_id": "exp1-baseline-1-3e6df30e",
+        "crash_step": 9,
+        "pre_crash_completed_steps": 9,
+        "rerun_thread_id": "exp1-baseline-1-3e6df30e::baseline-rerun::01::3302a219",
+        "metrics": {
+          "completed_steps": 30,
+          "llm_calls": 16,
+          "actual_tool_calls": 14,
+          "steps_reexecuted": 21,
+          "wall_clock_seconds": 7.993667874950916,
+          "storage_overhead_bytes": 1539736,
+          "total_tokens": 0,
+          "prompt_tokens": 0,
+          "completion_tokens": 0
+        }
+      },
+      {
+        "run_id": "exp1-baseline-2-fcfcf648",
+        "crash_step": 9,
+        "pre_crash_completed_steps": 10,
+        "rerun_thread_id": "exp1-baseline-2-fcfcf648::baseline-rerun::01::b6fa75ed",
+        "metrics": {
+          "completed_steps": 31,
+          "llm_calls": 16,
+          "actual_tool_calls": 15,
+          "steps_reexecuted": 21,
+          "wall_clock_seconds": 8.46295433305204,
+          "storage_overhead_bytes": 1564408,
+          "total_tokens": 0,
+          "prompt_tokens": 0,
+          "completion_tokens": 0
+        }
+      },
+      {
+        "run_id": "exp1-baseline-3-9c14d5dc",
+        "crash_step": 9,
+        "pre_crash_completed_steps": 9,
+        "rerun_thread_id": "exp1-baseline-3-9c14d5dc::baseline-rerun::01::60d00632",
+        "metrics": {
+          "completed_steps": 30,
+          "llm_calls": 16,
+          "actual_tool_calls": 14,
+          "steps_reexecuted": 21,
+          "wall_clock_seconds": 7.888628832995892,
+          "storage_overhead_bytes": 1539736,
+          "total_tokens": 0,
+          "prompt_tokens": 0,
+          "completion_tokens": 0
+        }
+      }
+    ],
+    "averages": {
+      "completed_steps": 30.333333333333332,
+      "llm_calls": 16.0,
+      "actual_tool_calls": 14.333333333333334,
+      "steps_reexecuted": 21.0,
+      "wall_clock_seconds": 8.11508368033295,
+      "storage_overhead_bytes": 1547960.0,
+      "total_tokens": 0.0
+    }
+  },
+  "durable": {
+    "recovery_mode": "resume_from_last_checkpoint",
+    "trials": [
+      {
+        "run_id": "exp1-durable-1-b7f5c1a4",
+        "crash_step": 9,
+        "pre_crash_completed_steps": 10,
+        "metrics": {
+          "completed_steps": 21,
+          "llm_calls": 11,
+          "actual_tool_calls": 10,
+          "steps_reexecuted": 11,
+          "wall_clock_seconds": 6.4695811667479575,
+          "storage_overhead_bytes": 1049408,
+          "total_tokens": 9339,
+          "prompt_tokens": 9081,
+          "completion_tokens": 258
+        }
+      },
+      {
+        "run_id": "exp1-durable-2-0243a299",
+        "crash_step": 9,
+        "pre_crash_completed_steps": 10,
+        "metrics": {
+          "completed_steps": 21,
+          "llm_calls": 11,
+          "actual_tool_calls": 10,
+          "steps_reexecuted": 11,
+          "wall_clock_seconds": 7.742708333302289,
+          "storage_overhead_bytes": 1041168,
+          "total_tokens": 9339,
+          "prompt_tokens": 9081,
+          "completion_tokens": 258
+        }
+      },
+      {
+        "run_id": "exp1-durable-3-44dd17e0",
+        "crash_step": 9,
+        "pre_crash_completed_steps": 10,
+        "metrics": {
+          "completed_steps": 21,
+          "llm_calls": 11,
+          "actual_tool_calls": 10,
+          "steps_reexecuted": 11,
+          "wall_clock_seconds": 5.44046870758757,
+          "storage_overhead_bytes": 1049408,
+          "total_tokens": 9339,
+          "prompt_tokens": 9081,
+          "completion_tokens": 258
+        }
+      }
+    ],
+    "averages": {
+      "completed_steps": 21.0,
+      "llm_calls": 11.0,
+      "actual_tool_calls": 10.0,
+      "steps_reexecuted": 11.0,
+      "wall_clock_seconds": 6.550919402545939,
+      "storage_overhead_bytes": 1046661.3333333334,
+      "total_tokens": 9339.0
+    }
+  }
+}

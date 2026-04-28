@@ -1,200 +1,293 @@
-"""Experiment 3: Fault Injection Resilience (The Position N Trap)"""
-"""How to run: python scripts/exp3.py """
+"""Experiment 3: fault injection resilience."""
 
+from __future__ import annotations
+
+import argparse
 import os
+import subprocess
 import sys
 import time
-import sqlite3
-import subprocess
+import uuid
+
+from contextlib import contextmanager
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from langchain_core.messages import ToolMessage
 
-from src.db import create_shared_connection, get_db_size_kb
-from src.agent import build_graph
+from src.agent import build_baseline_graph, build_graph
+from src.db import create_shared_connection, setup_aer_tables
+from src.experiment_utils import (
+    baseline_rerun_thread_id,
+    collect_run_metrics,
+    metrics_to_dict,
+    storage_overhead_bytes,
+    token_usage_for_threads,
+    write_results_json,
+)
+from src.recovery import cmd_recover, cmd_recover_baseline
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-DURABLE_DB_PATH = os.path.join(PROJECT_ROOT, "exp3_durable_db.sqlite")
-BASELINE_DB_PATH = os.path.join(PROJECT_ROOT, "exp3_baseline_db.sqlite")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+RESULTS_PATH = PROJECT_ROOT / "results" / "exp3_results.json"
+TMP_DIR = PROJECT_ROOT / "results" / "tmp"
 
-# Average tokens per step (Think/Act cycle) based on previous Gemini 2.5 Flash execution logs
-ESTIMATED_TOKENS_PER_STEP = 1200 
+FAULT_PROMPT = """
+You are a benchmark testing agent running at temperature=0.
+You must complete the following objective.
+CRITICAL RULES:
+- You are forbidden from calling multiple tools at the same time.
+- You must wait for the exact result of the previous tool before calling the next one.
+- Stopping early is a failed run. The task is not complete until the database write succeeds.
 
-SHARED_PROMPT = """
-You are a benchmark testing agent running at temperature=0. 
-You must complete the following objective. 
-CRITICAL RULE: You are forbidden from calling multiple tools at the same time. You must wait for the exact result of the previous tool before calling the next one.
+Primary tasks:
+1. Use [web_search] with query = "Project Nexus overview".
+2. Use [extract_data] with url = "https://project-nexus.example/overview", field = "description".
+3. Use [summarize] with text = "Summarize the Project Nexus description in one sentence."
+4. Use [web_search] with query = "Project Nexus executive summary".
+5. Use [extract_data] with url = "https://project-nexus.example/executive-summary", field = "executive_summary".
+6. Use [summarize] with text = "Summarize the Project Nexus executive summary in two sentences."
+7. Use [web_search] with query = "Project Nexus market reaction".
+8. Use [extract_data] with url = "https://project-nexus.example/market-reaction", field = "market_reaction".
+9. Use [summarize] with text = "Summarize the Project Nexus market reaction in one sentence."
+10. Use [write_to_database] to save "overview summary; executive summary; market reaction summary" with record_id "Nexus_Report_001".
 
-Primary Tasks:
-1. Use [web_search] with the exact query: "Find the official URL for Project Nexus".
-2. Use [extract_data] with the URL you just found, and request the field: "annual_report_link".
-3. Use [extract_data] again with the "annual_report_link", requesting the field: "executive_summary_text".
-4. Use [summarize] to summarize the "executive_summary_text".
-5. Use [web_search] again with the query: "Market reactions to " followed by the summarized text.
-6. Use [write_to_database] to save the market reactions. Use the record_id: "Nexus_Report_001".
+Fault-recovery rule:
+If the first attempt to use [write_to_database] fails with a tool error, your current execution path is blocked.
+Do not retry [write_to_database] immediately.
+Instead, do this fallback path in order:
+11. Use [web_search] with query = "Project Nexus recovery context".
+12. Use [summarize] with text = "Summarize the Project Nexus recovery context in one sentence."
+13. Then use [write_to_database] again with record_id "Nexus_Report_001" and data = "overview summary; executive summary; market reaction summary; recovery context".
 
-FAULT RECOVERY RULE (AUTONOMOUS RE-PLANNING):
-You are a highly intelligent agent. If a tool encounters a critical error (such as a TimeoutError), it means your current execution path is blocked. 
-DO NOT blindly retry the exact same tool immediately. You MUST autonomously figure out a different path or perform a different logical tool action to reset your state before trying the failed objective again.
+After the database write succeeds, output exactly: "BENCHMARK_COMPLETE: Nexus_Report_001 saved."
+""".strip()
 
-After the database write is successfully completed, output the exact string: "BENCHMARK_COMPLETE: Nexus_Report_001 saved."
-"""
 
-def setup_fault_environment(db_path: str, run_id: str) -> dict:
-    """Configures the environment variables for the Position N Trap."""
-    env = os.environ.copy()
-    env["DB_PATH"] = db_path
-    env["CURRENT_RUN_ID"] = run_id       
-    env["EXP3_POSITION_MODE"] = "true"   
-    env["AGENT_PROMPT"] = SHARED_PROMPT
-    env["EXP3_TARGET_TOOL"] = "write_to_database"
-    env["EXP3_FAULT_TYPE"] = "timeout" 
-    env["EXP3_FAULT_CALL"] = "12"        
-    return env
-
-def get_db_steps(db_path: str, run_id: str) -> int:
-    """Extracts the exact number of LLM steps executed from the events table."""
+@contextmanager
+def patched_environ(**updates: str):
+    original = {key: os.environ.get(key) for key in updates}
     try:
-        if not os.path.exists(db_path):
-            return 0
-        with sqlite3.connect(db_path) as conn:
-            res = conn.execute("SELECT COUNT(*) FROM events WHERE run_id = ?", (run_id,)).fetchone()
-            return res[0] if res else 0
-    except Exception:
-        return 0
+        for key, value in updates.items():
+            os.environ[key] = value
+        yield
+    finally:
+        for key, value in original.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
-def inject_error_state(run_id: str, db_path: str):
-    """Injects a TimeoutError into the agent's checkpoint to force replanning."""
+
+def inject_error_state(run_id: str, db_path: str) -> None:
+    """Inject an error tool message into the checkpoint to force replanning."""
     conn = create_shared_connection(db_path)
+    setup_aer_tables(conn)
     graph = build_graph(conn)
     config = {"configurable": {"thread_id": run_id}}
     state = graph.get_state(config)
-
     messages = state.values.get("messages", [])
+
     if messages and hasattr(messages[-1], "tool_calls") and messages[-1].tool_calls:
         tool_call = messages[-1].tool_calls[0]
-        
         error_msg = ToolMessage(
             content="TimeoutError: Database connection failed. Execution path blocked.",
             tool_call_id=tool_call["id"],
-            name=tool_call["name"]
+            name=tool_call["name"],
         )
-        print("[Watchdog] Injecting Error Message into Checkpoint to force re-planning")
         graph.update_state(config, {"messages": [error_msg]}, as_node="tools")
+
     conn.close()
 
-def run_durable_agent_with_fault() -> tuple[bool, float, int, int]:
-    print("\n" + "="*50)
-    print("[Durable Agent] Starting Fault Injection Test (Re-plan Mode)")
-    print("="*50)
-    
-    if os.path.exists(DURABLE_DB_PATH):
-        os.remove(DURABLE_DB_PATH)
 
-    run_id = "exp3-durable-001"
-    env = setup_fault_environment(DURABLE_DB_PATH, run_id)
-    start_time = time.perf_counter()
-    
-    print("\n[Attempt 1] Running Agent (Expecting Crash at Global Step 12)")
+def _token_metrics(db_path: str, thread_ids: list[str], durable: bool) -> tuple[int | None, int | None, int | None]:
     try:
-        subprocess.run(
-            [sys.executable, "-m", "src", "run", run_id],
-            env=env, cwd=PROJECT_ROOT, check=True
-        )
-    except subprocess.CalledProcessError:
-        print("[CRASH DETECTED] Agent hit the Position N trap at Step 12!")
-    
-    print("\n[Attempt 2] Recovering WITHOUT Removing the Trap")
-    success = False
-    try:
-        inject_error_state(run_id, DURABLE_DB_PATH)
-        subprocess.run(
-            [sys.executable, "-m", "src", "recover", run_id],
-            env=env, cwd=PROJECT_ROOT, check=True
-        )
-        print("[RECOVERY SUCCESS] Agent successfully planned a new path and completed the task!")
-        success = True
-    except subprocess.CalledProcessError:
-        print("[RECOVERY FAILED] Agent still hit the trap. Re-planning failed.")
+        conn = create_shared_connection(db_path)
+        setup_aer_tables(conn)
+        graph = build_graph(conn) if durable else build_baseline_graph(conn)
+        prompt_tokens, completion_tokens, total_tokens = token_usage_for_threads(graph, thread_ids)
+        conn.close()
+        return prompt_tokens, completion_tokens, total_tokens
+    except Exception:
+        return None, None, None
 
-    end_time = time.perf_counter()
-    
-    # Calculate exact steps taken by the Durable Agent across all attempts
-    total_steps = get_db_steps(DURABLE_DB_PATH, run_id)
-    
-    return success, end_time - start_time, 2, total_steps
 
-def run_baseline_agent_with_fault() -> tuple[bool, float, int, int]:
-    print("\n" + "="*50)
-    print("[Baseline Agent] Starting Fault Injection Test")
-    print("="*50)
-    
-    run_id = "exp3-baseline-001"
-    env = setup_fault_environment(BASELINE_DB_PATH, run_id)
-    start_time = time.perf_counter()
-    
-    max_retries = 3 
-    attempts = 0
-    success = False
-    total_baseline_steps = 0
+def _run_initial_attempt(run_id: str, db_path: str, baseline: bool, env_updates: dict[str, str]) -> bool:
+    cmd = [sys.executable, "-m", "src", "run", run_id]
+    if baseline:
+        cmd.append("True")
+    completed = subprocess.run(
+        cmd,
+        cwd=PROJECT_ROOT,
+        env={**os.environ, **env_updates, "DB_PATH": db_path, "AGENT_PROMPT": FAULT_PROMPT},
+        text=True,
+        capture_output=True,
+    )
+    return completed.returncode == 0
 
-    while attempts < max_retries:
-        attempts += 1
-        print(f"\n[Attempt {attempts}] Running Baseline Agent from scratch")
-        
-        if os.path.exists(BASELINE_DB_PATH):
-            os.remove(BASELINE_DB_PATH)
-        
-        env["DB_PATH"] = BASELINE_DB_PATH
 
-        try:
-            subprocess.run(
-                [sys.executable, "-m", "src", "run", run_id],
-                env=env, cwd=PROJECT_ROOT, check=True
+def durable_trial(run_id: str, db_path: str, fault_type: str, fault_call: int, max_recoveries: int) -> dict:
+    """Run one durable fault-injection trial."""
+    start = time.perf_counter()
+    env_updates = {
+        "CURRENT_RUN_ID": run_id,
+        "EXP3_POSITION_MODE": "true",
+        "EXP3_TARGET_TOOL": "write_to_database",
+        "EXP3_FAULT_TYPE": fault_type,
+        "EXP3_FAULT_CALL": str(fault_call),
+    }
+    attempts = 1
+    recovery_attempts = 0
+    success = _run_initial_attempt(run_id, db_path, baseline=False, env_updates=env_updates)
+
+    with patched_environ(**env_updates):
+        while not success and recovery_attempts < max_recoveries:
+            recovery_attempts += 1
+            attempts += 1
+            inject_error_state(run_id, db_path)
+            try:
+                cmd_recover(run_id, db_path)
+                success = True
+            except Exception:
+                success = False
+
+    elapsed = time.perf_counter() - start
+    conn = create_shared_connection(db_path)
+    setup_aer_tables(conn)
+    metrics = collect_run_metrics(conn, run_id, durable=True)
+    conn.close()
+    metrics.wall_clock_seconds = elapsed
+    metrics.storage_overhead_bytes = storage_overhead_bytes(db_path)
+    prompt_tokens, completion_tokens, total_tokens = _token_metrics(db_path, [run_id], durable=True)
+    metrics.prompt_tokens = prompt_tokens
+    metrics.completion_tokens = completion_tokens
+    metrics.total_tokens = total_tokens
+
+    return {
+        "run_id": run_id,
+        "fault_type": fault_type,
+        "fault_call": fault_call,
+        "attempts": attempts,
+        "success": success,
+        "metrics": metrics_to_dict(metrics),
+    }
+
+
+def baseline_trial(run_id: str, db_path: str, fault_type: str, fault_call: int, max_recoveries: int) -> dict:
+    """Run one baseline fault-injection trial with full reruns."""
+    start = time.perf_counter()
+    env_updates = {
+        "CURRENT_RUN_ID": run_id,
+        "EXP3_POSITION_MODE": "true",
+        "EXP3_TARGET_TOOL": "write_to_database",
+        "EXP3_FAULT_TYPE": fault_type,
+        "EXP3_FAULT_CALL": str(fault_call),
+    }
+
+    attempts = 1
+    success = _run_initial_attempt(run_id, db_path, baseline=True, env_updates=env_updates)
+    rerun_threads: list[str] = []
+
+    with patched_environ(**env_updates):
+        while not success and attempts <= max_recoveries + 1:
+            rerun_thread = baseline_rerun_thread_id(run_id, attempts - 1)
+            rerun_threads.append(rerun_thread)
+            attempts += 1
+            try:
+                cmd_recover_baseline(
+                    run_id,
+                    db_path,
+                    input_message=FAULT_PROMPT,
+                    rerun_thread_id=rerun_thread,
+                )
+                success = True
+            except Exception:
+                success = False
+
+    elapsed = time.perf_counter() - start
+    conn = create_shared_connection(db_path)
+    setup_aer_tables(conn)
+    metrics = collect_run_metrics(conn, run_id, durable=False)
+    conn.close()
+    metrics.wall_clock_seconds = elapsed
+    metrics.storage_overhead_bytes = storage_overhead_bytes(db_path)
+    prompt_tokens, completion_tokens, total_tokens = _token_metrics(
+        db_path,
+        [run_id, *rerun_threads],
+        durable=False,
+    )
+    metrics.prompt_tokens = prompt_tokens
+    metrics.completion_tokens = completion_tokens
+    metrics.total_tokens = total_tokens
+
+    return {
+        "run_id": run_id,
+        "fault_type": fault_type,
+        "fault_call": fault_call,
+        "attempts": attempts,
+        "success": success,
+        "rerun_thread_ids": rerun_threads,
+        "metrics": metrics_to_dict(metrics),
+    }
+
+
+def _summarize(trials: list[dict]) -> dict:
+    success_count = sum(1 for trial in trials if trial["success"])
+    average_time = sum(trial["metrics"]["wall_clock_seconds"] for trial in trials) / len(trials)
+    average_attempts = sum(trial["attempts"] for trial in trials) / len(trials)
+    return {
+        "success_rate": success_count / len(trials),
+        "average_wall_clock_seconds": average_time,
+        "average_attempts": average_attempts,
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--fault-types", nargs="+", default=["timeout", "tool_error", "rate_limit"])
+    parser.add_argument("--repeats", type=int, default=3)
+    parser.add_argument("--fault-call", type=int, default=19)
+    parser.add_argument("--max-recoveries", type=int, default=3)
+    parser.add_argument("--results", type=Path, default=RESULTS_PATH)
+    args = parser.parse_args()
+
+    TMP_DIR.mkdir(parents=True, exist_ok=True)
+    baseline_trials = []
+    durable_trials = []
+
+    for fault_type in args.fault_types:
+        for repeat in range(1, args.repeats + 1):
+            baseline_run_id = f"exp3-baseline-{fault_type}-{repeat}-{uuid.uuid4().hex[:6]}"
+            durable_run_id = f"exp3-durable-{fault_type}-{repeat}-{uuid.uuid4().hex[:6]}"
+            baseline_db = str(TMP_DIR / f"{baseline_run_id}.sqlite")
+            durable_db = str(TMP_DIR / f"{durable_run_id}.sqlite")
+
+            baseline_trials.append(
+                baseline_trial(baseline_run_id, baseline_db, fault_type, args.fault_call, args.max_recoveries)
             )
-            print(f"[SUCCESS] Baseline succeeded on attempt {attempts}!")
-            success = True
-            total_baseline_steps += get_db_steps(BASELINE_DB_PATH, run_id)
-            break
-        except subprocess.CalledProcessError:
-            print(f"[CRASH DETECTED] Baseline crashed due to TimeoutError on attempt {attempts}.")
-            
-            # Accumulate the wasted steps before we wipe the DB for the next loop
-            wasted_steps = get_db_steps(BASELINE_DB_PATH, run_id)
-            total_baseline_steps += wasted_steps
-            print(f"[METRICS] Baseline wasted {wasted_steps} steps in this failed attempt.")
-            
-            time.sleep(2) 
+            durable_trials.append(
+                durable_trial(durable_run_id, durable_db, fault_type, args.fault_call, args.max_recoveries)
+            )
 
-    end_time = time.perf_counter()
-    
-    if not success:
-        print(f"[FAILED] Baseline gave up after {max_retries} attempts (Infinite Loop avoided).")
+    payload = {
+        "experiment": "exp3_fault_injection_resilience",
+        "fault_types": args.fault_types,
+        "repeats": args.repeats,
+        "fault_call": args.fault_call,
+        "baseline": {
+            "recovery_mode": "full_rerun_from_start",
+            "trials": baseline_trials,
+            "summary": _summarize(baseline_trials),
+        },
+        "durable": {
+            "recovery_mode": "resume_from_last_checkpoint",
+            "trials": durable_trials,
+            "summary": _summarize(durable_trials),
+        },
+    }
+    write_results_json(str(args.results), payload)
+    print(f"Saved results to {args.results}")
 
-    return success, end_time - start_time, attempts, total_baseline_steps
 
 if __name__ == "__main__":
-    print("Starting Experiment 3: Fault Injection Resilience")
-    d_success, d_time, d_attempts, d_steps = run_durable_agent_with_fault()
-    b_success, b_time, b_attempts, b_steps = run_baseline_agent_with_fault()
-
-    d_est_tokens = d_steps * ESTIMATED_TOKENS_PER_STEP
-    b_est_tokens = b_steps * ESTIMATED_TOKENS_PER_STEP
-
-    print("\n" + "="*65)
-    print("Experiment 3 Final Results")
-    print("="*65)
-    print(f"| Metric               | Durable Agent       | Baseline Agent      |")
-    print(f"|----------------------|---------------------|---------------------|")
-    print(f"| End-to-End Success   | {'Yes' if d_success else 'No'}{' '*16}| {'Yes' if b_success else 'No'}{' '*16}|")
-    print(f"| Total Attempts       | {d_attempts}{' '*18}| {b_attempts} (Max: 3){' '*8}|")
-    print(f"| Wall-clock Time      | {d_time:.2f} seconds       | {b_time:.2f} seconds       |")
-    print(f"| Storage Overhead     | {get_db_size_kb(DURABLE_DB_PATH):.2f} KB            | {get_db_size_kb(BASELINE_DB_PATH):.2f} KB            |")
-    print(f"| Total LLM Steps      | {d_steps} steps            | {b_steps} steps            |")
-    print(f"| Est. Token Cost      | ~{d_est_tokens} tokens      | ~{b_est_tokens} tokens      |")
-    print("="*65)
-    print("Conclusion:")
-    
-    if d_success and not b_success:
-        print("Durable Agent successfully read the error state, autonomously re-planned its path,")
-        print("bypassed the global Step 12 trap, and completed the task. Because of the Idempotency")
-        print("cache, repeating steps during re-planning did not incur actual tool execution costs.")
-        print(f"Baseline Agent lacked memory, wasting ~{b_est_tokens} tokens in a stateless infinite loop.")
+    main()

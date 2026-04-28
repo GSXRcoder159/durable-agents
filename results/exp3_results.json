@@ -1,0 +1,154 @@
+{
+  "experiment": "exp3_fault_injection_resilience",
+  "fault_types": [
+    "timeout"
+  ],
+  "repeats": 3,
+  "fault_call": 12,
+  "baseline": {
+    "recovery_mode": "full_rerun_from_start",
+    "trials": [
+      {
+        "run_id": "exp3-baseline-timeout-1-a6941d",
+        "fault_type": "timeout",
+        "fault_call": 12,
+        "attempts": 5,
+        "success": false,
+        "rerun_thread_ids": [
+          "exp3-baseline-timeout-1-a6941d::baseline-rerun::00::918a4df2",
+          "exp3-baseline-timeout-1-a6941d::baseline-rerun::01::eff75c7f",
+          "exp3-baseline-timeout-1-a6941d::baseline-rerun::02::8e39ab83",
+          "exp3-baseline-timeout-1-a6941d::baseline-rerun::03::621ce303"
+        ],
+        "metrics": {
+          "completed_steps": 95,
+          "llm_calls": 50,
+          "actual_tool_calls": 45,
+          "steps_reexecuted": 0,
+          "wall_clock_seconds": 21.30408216593787,
+          "storage_overhead_bytes": 5762552,
+          "total_tokens": 0,
+          "prompt_tokens": 0,
+          "completion_tokens": 0
+        }
+      },
+      {
+        "run_id": "exp3-baseline-timeout-2-024866",
+        "fault_type": "timeout",
+        "fault_call": 12,
+        "attempts": 5,
+        "success": false,
+        "rerun_thread_ids": [
+          "exp3-baseline-timeout-2-024866::baseline-rerun::00::e8b9d614",
+          "exp3-baseline-timeout-2-024866::baseline-rerun::01::cae764d4",
+          "exp3-baseline-timeout-2-024866::baseline-rerun::02::799847cd",
+          "exp3-baseline-timeout-2-024866::baseline-rerun::03::78bd3f6a"
+        ],
+        "metrics": {
+          "completed_steps": 95,
+          "llm_calls": 50,
+          "actual_tool_calls": 45,
+          "steps_reexecuted": 0,
+          "wall_clock_seconds": 20.057312542106956,
+          "storage_overhead_bytes": 5762552,
+          "total_tokens": 0,
+          "prompt_tokens": 0,
+          "completion_tokens": 0
+        }
+      },
+      {
+        "run_id": "exp3-baseline-timeout-3-925d75",
+        "fault_type": "timeout",
+        "fault_call": 12,
+        "attempts": 5,
+        "success": false,
+        "rerun_thread_ids": [
+          "exp3-baseline-timeout-3-925d75::baseline-rerun::00::6e4151d6",
+          "exp3-baseline-timeout-3-925d75::baseline-rerun::01::88c95062",
+          "exp3-baseline-timeout-3-925d75::baseline-rerun::02::f21f8711",
+          "exp3-baseline-timeout-3-925d75::baseline-rerun::03::9e2b7b67"
+        ],
+        "metrics": {
+          "completed_steps": 95,
+          "llm_calls": 50,
+          "actual_tool_calls": 45,
+          "steps_reexecuted": 0,
+          "wall_clock_seconds": 29.37781162466854,
+          "storage_overhead_bytes": 5762552,
+          "total_tokens": 0,
+          "prompt_tokens": 0,
+          "completion_tokens": 0
+        }
+      }
+    ],
+    "summary": {
+      "success_rate": 0.0,
+      "average_wall_clock_seconds": 23.579735444237787,
+      "average_attempts": 5.0
+    }
+  },
+  "durable": {
+    "recovery_mode": "resume_from_last_checkpoint",
+    "trials": [
+      {
+        "run_id": "exp3-durable-timeout-1-4da3d9",
+        "fault_type": "timeout",
+        "fault_call": 12,
+        "attempts": 1,
+        "success": true,
+        "metrics": {
+          "completed_steps": 21,
+          "llm_calls": 11,
+          "actual_tool_calls": 10,
+          "steps_reexecuted": 0,
+          "wall_clock_seconds": 5.305577042046934,
+          "storage_overhead_bytes": 454656,
+          "total_tokens": 10784,
+          "prompt_tokens": 10518,
+          "completion_tokens": 266
+        }
+      },
+      {
+        "run_id": "exp3-durable-timeout-2-7783a1",
+        "fault_type": "timeout",
+        "fault_call": 12,
+        "attempts": 1,
+        "success": true,
+        "metrics": {
+          "completed_steps": 21,
+          "llm_calls": 11,
+          "actual_tool_calls": 10,
+          "steps_reexecuted": 0,
+          "wall_clock_seconds": 5.46788466675207,
+          "storage_overhead_bytes": 454656,
+          "total_tokens": 10784,
+          "prompt_tokens": 10518,
+          "completion_tokens": 266
+        }
+      },
+      {
+        "run_id": "exp3-durable-timeout-3-17739e",
+        "fault_type": "timeout",
+        "fault_call": 12,
+        "attempts": 1,
+        "success": true,
+        "metrics": {
+          "completed_steps": 21,
+          "llm_calls": 11,
+          "actual_tool_calls": 10,
+          "steps_reexecuted": 0,
+          "wall_clock_seconds": 5.345887250266969,
+          "storage_overhead_bytes": 454656,
+          "total_tokens": 10784,
+          "prompt_tokens": 10518,
+          "completion_tokens": 266
+        }
+      }
+    ],
+    "summary": {
+      "success_rate": 1.0,
+      "average_wall_clock_seconds": 5.373116319688658,
+      "average_attempts": 1.0
+    }
+  }
+}

@@ -2,7 +2,6 @@
 import hashlib
 import json
 import sqlite3
-from unittest import result
 
 from langgraph.graph.state import CompiledStateGraph, RunnableConfig
 from typing import Any, Dict, Optional
@@ -45,6 +44,40 @@ def _extract_tool_name(payload: Dict[str, Any]) -> Optional[str]:
                 return first.get("name")
             return getattr(first, "name", None)
     return None
+
+def _looks_incomplete_terminal_state(values: Any) -> bool:
+    """Return True if the latest assistant message looks like an empty early stop."""
+    if not isinstance(values, dict):
+        return False
+
+    messages = values.get("messages")
+    if not isinstance(messages, list) or not messages:
+        return False
+
+    last = messages[-1]
+    if isinstance(last, dict):
+        content = last.get("content")
+        tool_calls = last.get("tool_calls") or []
+        invalid_tool_calls = last.get("invalid_tool_calls") or []
+        additional_kwargs = last.get("additional_kwargs") or {}
+        response_metadata = last.get("response_metadata") or {}
+    else:
+        content = getattr(last, "content", None)
+        tool_calls = getattr(last, "tool_calls", None) or []
+        invalid_tool_calls = getattr(last, "invalid_tool_calls", None) or []
+        additional_kwargs = getattr(last, "additional_kwargs", None) or {}
+        response_metadata = getattr(last, "response_metadata", None) or {}
+
+    finish_reason = response_metadata.get("finish_reason")
+    has_function_call = bool(additional_kwargs.get("function_call"))
+    has_content = bool(str(content).strip()) if content is not None else False
+
+    return (
+        not has_content
+        and not tool_calls
+        and not has_function_call
+        and (finish_reason in {"STOP", "MALFORMED_FUNCTION_CALL"} or bool(invalid_tool_calls))
+    )
 
 class StepLogger:
     """Write-ahead step logger for the database.
@@ -140,8 +173,38 @@ class StepLogger:
         metrics = AgentMetricsHandler()
         config: RunnableConfig = {"configurable": {"thread_id": thread_id}, "callbacks": [metrics],
                                   "recursion_limit": 25}
-        
-        events = graph.stream({"messages": [("user", input_message)]}, config, stream_mode="debug", durability="sync")
-        self.process_events(events, thread_id)
-        final_state = graph.get_state(config).values
-        return final_state
+
+        stream_input: Any = {"messages": [("user", input_message)]}
+        previous_next: Optional[tuple] = None
+        max_run_loops = 64
+        max_continuation_nudges = 2
+        continuation_nudges = 0
+
+        for _ in range(max_run_loops):
+            events = graph.stream(stream_input, config, stream_mode="debug", durability="sync")
+            stream_input = None
+            self.process_events(events, thread_id)
+
+            state = graph.get_state(config)
+            if not state.next:
+                state_values = getattr(state, "values", None)
+                if continuation_nudges < max_continuation_nudges and _looks_incomplete_terminal_state(state_values):
+                    continuation_nudges += 1
+                    print("[WARN] Run reached empty terminal state; nudging model to continue.")
+                    stream_input = {
+                        "messages": [(
+                            "user",
+                            "Continue from where you left off and complete any remaining required work. "
+                            "If tools are needed, call exactly one tool at a time until the task is done.",
+                        )]
+                    }
+                    previous_next = ()
+                    continue
+                return state_values
+
+            current_next = tuple(state.next)
+            if previous_next is not None and current_next == previous_next:
+                return getattr(state, "values", None)
+            previous_next = current_next
+
+        return graph.get_state(config).values
