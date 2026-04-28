@@ -45,6 +45,40 @@ def _extract_tool_name(payload: Dict[str, Any]) -> Optional[str]:
             return getattr(first, "name", None)
     return None
 
+def _looks_incomplete_terminal_state(values: Any) -> bool:
+    """Return True if the latest assistant message looks like an empty early stop."""
+    if not isinstance(values, dict):
+        return False
+
+    messages = values.get("messages")
+    if not isinstance(messages, list) or not messages:
+        return False
+
+    last = messages[-1]
+    if isinstance(last, dict):
+        content = last.get("content")
+        tool_calls = last.get("tool_calls") or []
+        invalid_tool_calls = last.get("invalid_tool_calls") or []
+        additional_kwargs = last.get("additional_kwargs") or {}
+        response_metadata = last.get("response_metadata") or {}
+    else:
+        content = getattr(last, "content", None)
+        tool_calls = getattr(last, "tool_calls", None) or []
+        invalid_tool_calls = getattr(last, "invalid_tool_calls", None) or []
+        additional_kwargs = getattr(last, "additional_kwargs", None) or {}
+        response_metadata = getattr(last, "response_metadata", None) or {}
+
+    finish_reason = response_metadata.get("finish_reason")
+    has_function_call = bool(additional_kwargs.get("function_call"))
+    has_content = bool(str(content).strip()) if content is not None else False
+
+    return (
+        not has_content
+        and not tool_calls
+        and not has_function_call
+        and (finish_reason in {"STOP", "MALFORMED_FUNCTION_CALL"} or bool(invalid_tool_calls))
+    )
+
 class StepLogger:
     """Write-ahead step logger for the database.
     
@@ -78,13 +112,35 @@ class StepLogger:
                 step_type = "act" if node_name == "tools" else "think"
                 tool_name = _extract_tool_name(payload.get("input", {})) if step_type == "act" else None
                 input_hash = compute_input_hash(payload.get("input"))
-                cursor = self.conn.execute(
-                    "INSERT INTO events (run_id, step_id, step_type, tool_name, input_hash, status) VALUES (?, ?, ?, ?, ?, ?)",
-                    (thread_id, event.get("step"), step_type, tool_name, input_hash, EVENT_STATUS_PENDING)
-                )
-                self.conn.commit()
+                # If this exact step already has a pending row (e.g., process crashed after
+                # writing PENDING but before task_result), reuse it on recovery.
+                step_id = event.get("step")
+                existing_pending_row = self.conn.execute(
+                    """SELECT id FROM events
+                       WHERE run_id = ? AND step_id = ? AND status = ?
+                       ORDER BY id DESC LIMIT 1""",
+                    (thread_id, step_id, EVENT_STATUS_PENDING),
+                ).fetchone()
+
+                if existing_pending_row is not None:
+                    row_id = existing_pending_row[0]
+                else:
+                    # If step_id already exists for this run (completed/error rows), the
+                    # graph is retrying, so allocate the next available step id.
+                    while self.conn.execute(
+                        "SELECT 1 FROM events WHERE run_id = ? AND step_id = ?",
+                        (thread_id, step_id),
+                    ).fetchone():
+                        step_id += 1
+                    cursor = self.conn.execute(
+                        "INSERT INTO events (run_id, step_id, step_type, tool_name, input_hash, status) VALUES (?, ?, ?, ?, ?, ?)",
+                        (thread_id, step_id, step_type, tool_name, input_hash, EVENT_STATUS_PENDING)
+                    )
+                    self.conn.commit()
+                    row_id = cursor.lastrowid  # pyright: ignore[reportArgumentType]
+
                 task_id = payload.get("id", "")
-                pending[task_id] = cursor.lastrowid # pyright: ignore[reportArgumentType]
+                pending[task_id] = row_id
             
             elif event_type == "task_result":
                 task_id = payload.get("id", "")
@@ -103,7 +159,7 @@ class StepLogger:
         
         return last_result
 
-    def run(self, graph: CompiledStateGraph, input_message: str, thread_id: str) -> Optional[str]:
+    def run(self, graph: CompiledStateGraph, input_message: str, thread_id: str) -> dict:
         """Stream `graph` with debug events and log step.
 
         Args:
@@ -115,11 +171,40 @@ class StepLogger:
             Optional[str]: Serialized result of the last executed graph node, or `None` if no nodes were executed
         """
         metrics = AgentMetricsHandler()
-        config: RunnableConfig = {"configurable": {"thread_id": thread_id}, "callbacks": [metrics]}
-        events = graph.stream({"messages": [("user", input_message)]}, config, stream_mode="debug", durability="sync")
-        result = self.process_events(events, thread_id)
-        summary = metrics.get_summary()
-        print(f"--- Run Metrics ---")
-        print(f"Total Calls: {summary['call_count']}")
-        print(f"Total Tokens: {summary['total_tokens']} ({summary['prompt_tokens']} in, {summary['completion_tokens']} out)")
-        return result
+        config: RunnableConfig = {"configurable": {"thread_id": thread_id}, "callbacks": [metrics],
+                                  "recursion_limit": 25}
+
+        stream_input: Any = {"messages": [("user", input_message)]}
+        previous_next: Optional[tuple] = None
+        max_run_loops = 64
+        max_continuation_nudges = 2
+        continuation_nudges = 0
+
+        for _ in range(max_run_loops):
+            events = graph.stream(stream_input, config, stream_mode="debug", durability="sync")
+            stream_input = None
+            self.process_events(events, thread_id)
+
+            state = graph.get_state(config)
+            if not state.next:
+                state_values = getattr(state, "values", None)
+                if continuation_nudges < max_continuation_nudges and _looks_incomplete_terminal_state(state_values):
+                    continuation_nudges += 1
+                    print("[WARN] Run reached empty terminal state; nudging model to continue.")
+                    stream_input = {
+                        "messages": [(
+                            "user",
+                            "Continue from where you left off and complete any remaining required work. "
+                            "If tools are needed, call exactly one tool at a time until the task is done.",
+                        )]
+                    }
+                    previous_next = ()
+                    continue
+                return state_values
+
+            current_next = tuple(state.next)
+            if previous_next is not None and current_next == previous_next:
+                return getattr(state, "values", None)
+            previous_next = current_next
+
+        return graph.get_state(config).values

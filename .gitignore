@@ -11,3 +11,4 @@ build/
 *.sqlite
 *.sqlite-*
 *.db
+documents/

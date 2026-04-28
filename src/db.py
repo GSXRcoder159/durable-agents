@@ -1,6 +1,6 @@
 """Shared SQLite connection factory."""
 import sqlite3
-
+import os
 # Events table statuses
 EVENT_STATUS_PENDING = "PENDING"
 EVENT_STATUS_COMPLETED = "COMPLETED"
@@ -66,3 +66,9 @@ def setup_aer_tables(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_tool_intents_hash ON tool_intents (intent_hash, status);
     """)
     conn.commit()
+
+def get_db_size_kb(path: str) -> float:
+    """Helper to record SQLite database size in KB."""
+    if os.path.exists(path):
+        return os.path.getsize(path) / 1024.0
+    return 0.0

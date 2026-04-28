@@ -10,13 +10,14 @@ from typing import Any, Optional
 
 from src.db import EVENT_STATUS_COMPLETED
 
-def inject_crash_at_step(run_id: str, step_id: int, db_path: str = "db.sqlite") -> int:
+def inject_crash_at_step(run_id: str, step_id: int, db_path: str = "db.sqlite", baseline: bool = False) -> int:
     """Spawn agent subprocess and SIGKILL it at step_id COMPLETED rows.
 
     Args:
         run_id (str): The run ID to target for fault injection 
         step_id (int): The step ID at which to inject the crash
         db_path (str, optional): The path to the SQLite database. Defaults to "db.sqlite".
+        baseline (bool, optional): Whether to run in baseline mode. Defaults to False.
 
     Returns:
         int: The subprocess return code
@@ -30,7 +31,11 @@ def inject_crash_at_step(run_id: str, step_id: int, db_path: str = "db.sqlite") 
         new_pythonpath = src_dir
     
     env = {**os.environ, "PYTHONPATH": new_pythonpath, "DB_PATH": db_path}
-    proc = subprocess.Popen([sys.executable, "-m", "src", "run", run_id], 
+    if baseline:
+        proc = subprocess.Popen([sys.executable, "-m", "src", "run", run_id, "True"], 
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+    else:
+        proc = subprocess.Popen([sys.executable, "-m", "src", "run", run_id], 
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
     
     # Wait for the subprocess to create and initialize the DB
@@ -66,23 +71,16 @@ def inject_crash_at_step(run_id: str, step_id: int, db_path: str = "db.sqlite") 
                 proc.kill()
                 proc.wait()
                 return proc.returncode
-        except sqlite3.OperationalError as e:
-            last_error = e
-            time.sleep(0.1)
-        except Exception as e:
-            last_error = e
-            time.sleep(0.1)
+            
+            time.sleep(0.01) # 10ms polling interval
+    finally:
+        conn.close()
+    
+    if proc.returncode == 0:
+        stdout, stderr = proc.communicate()
+        print("\n[DEBUG] Agent execution output:")
+        print(stdout.decode())
 
-        time.sleep(0.01)
-
-    # If we get here, the subprocess died on its own
-    stdout, stderr = proc.communicate()
-    print("=== Subprocess exited unexpectedly ===")
-    print(f"Return code: {proc.returncode}")
-    print("STDOUT:", stdout.decode() if stdout else "(empty)")
-    print("STDERR:", stderr.decode() if stderr else "(empty)")
-    if last_error:
-        print(f"Last SQLite error: {last_error}")
     return proc.returncode
 
 class FaultInjectionWrapper(BaseTool):
@@ -105,15 +103,36 @@ class FaultInjectionWrapper(BaseTool):
         object.__setattr__(self, "_call_count", 0)
 
     def _run(self, *args: Any, **kwargs: Any) -> Any:
-        count = self._call_count + 1
+        
+        count = getattr(self, "_call_count", 0) + 1
         object.__setattr__(self, "_call_count", count)
 
-        if count == self.call_number:
-            if self.fault_type == "timeout":
-                raise TimeoutError(f"[FAULT] Simulated API timeout at call {count} of tool {self.name}")
-            elif self.fault_type == "tool_error":
-                raise RuntimeError(f"[FAULT] Simulated tool error at call {count} of tool {self.name}")
-            elif self.fault_type == "rate_limit":
-                raise RuntimeError(f"[FAULT] Simulated rate limit at call {count} of tool {self.name}")
+        count_to_check = count 
+
+        is_exp3 = os.environ.get("EXP3_POSITION_MODE") == "true"
         
-        return self.wrapped_tool.run(*args, **kwargs)
+        if is_exp3:
+            db_path = os.environ.get("DB_PATH", "db.sqlite")
+            run_id = os.environ.get("CURRENT_RUN_ID", "default")
+            try:
+                with sqlite3.connect(db_path) as conn:
+                    res = conn.execute("SELECT COUNT(*) FROM events WHERE run_id = ?", (run_id,)).fetchone()
+                    count_to_check = res[0] if res else count
+            except:
+                count_to_check = count
+                
+        # Print out the current step count and the trap step for debugging and calibration purposes
+        print(f"[RADAR] '{self.name}' called. Current Global Step: {count_to_check}, Trap set at: {self.call_number}")
+
+        if str(count_to_check) == str(self.call_number):
+            print(f"[POSITION N TRAP] Triggering at Global Step: {count_to_check}")
+            
+            if self.fault_type == "timeout":
+                raise TimeoutError(f"[FAULT] Simulated API timeout at call {count_to_check} of tool {self.name}")
+            elif self.fault_type == "tool_error":
+                raise RuntimeError(f"[FAULT] Simulated tool error at call {count_to_check} of tool {self.name}")
+            elif self.fault_type == "rate_limit":
+                raise RuntimeError(f"[FAULT] Simulated rate limit at call {count_to_check} of tool {self.name}")
+        
+       
+        return self.wrapped_tool._run(*args, **kwargs)

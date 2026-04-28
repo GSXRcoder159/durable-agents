@@ -1,0 +1,55 @@
+{
+  "experiment": "exp2_idempotency_replay",
+  "record_id": "idempotency_report_001",
+  "data": "cached replay payload",
+  "baseline": {
+    "recovery_mode": "replay_reexecutes_tool",
+    "original_run": {
+      "completed_steps": 3,
+      "llm_calls": 2,
+      "actual_tool_calls": 1,
+      "steps_reexecuted": 0,
+      "wall_clock_seconds": 1.684531332924962,
+      "storage_overhead_bytes": 61440,
+      "total_tokens": null,
+      "prompt_tokens": null,
+      "completion_tokens": null
+    },
+    "replay_run": {
+      "completed_steps": 3,
+      "llm_calls": 2,
+      "actual_tool_calls": 1,
+      "steps_reexecuted": 3,
+      "wall_clock_seconds": 1.7078980416990817,
+      "storage_overhead_bytes": 86016,
+      "total_tokens": null,
+      "prompt_tokens": null,
+      "completion_tokens": null
+    }
+  },
+  "durable": {
+    "recovery_mode": "replay_uses_intent_cache",
+    "original_run": {
+      "completed_steps": 3,
+      "llm_calls": 2,
+      "actual_tool_calls": 1,
+      "steps_reexecuted": 0,
+      "wall_clock_seconds": 1.7680858746170998,
+      "storage_overhead_bytes": 61440,
+      "total_tokens": null,
+      "prompt_tokens": null,
+      "completion_tokens": null
+    },
+    "replay_run": {
+      "completed_steps": 3,
+      "llm_calls": 2,
+      "actual_tool_calls": 0,
+      "steps_reexecuted": 3,
+      "wall_clock_seconds": 1.71399816730991,
+      "storage_overhead_bytes": 86016,
+      "total_tokens": null,
+      "prompt_tokens": null,
+      "completion_tokens": null
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "clean_runs": [
+    "[MOCK SEARCH] Search results for 'Market reactions to [MOCK SUMMARIZE] Summary of '[MOCK EXTRACT] Extracted 'executive_summary_text' from '[MOCK EXTRACT] Extracted 'annual_report_link' from '[MOCK SEARCH] Search results for 'Find the official URL for Project Nexus'''''",
+    "[MOCK SEARCH] Search results for 'Market reactions to [MOCK SUMMARIZE] Summary of '[MOCK EXTRACT] Extracted 'executive_summary_text' from '[MOCK EXTRACT] Extracted 'annual_report_link' from '[MOCK SEARCH] Search results for 'Find the official URL for Project Nexus'''''",
+    "[MOCK SEARCH] Search results for 'Market reactions to [MOCK SUMMARIZE] Summary of '[MOCK EXTRACT] Extracted 'executive_summary_text' from '[MOCK EXTRACT] Extracted 'annual_report_link' from '[MOCK SEARCH] Search results for 'Find the official URL for Project Nexus'''''",
+    "[MOCK SEARCH] Search results for 'Market reactions to [MOCK SUMMARIZE] Summary of '[MOCK EXTRACT] Extracted 'executive_summary_text' from '[MOCK EXTRACT] Extracted 'annual_report_link' from '[MOCK SEARCH] Search results for 'Find the official URL for Project Nexus'''''",
+    "[MOCK SEARCH] Search results for 'Market reactions to [MOCK SUMMARIZE] Summary of '[MOCK EXTRACT] Extracted 'executive_summary_text' from '[MOCK EXTRACT] Extracted 'annual_report_link' from '[MOCK SEARCH] Search results for 'Find the official URL for Project Nexus'''''"
+  ],
+  "crash_recover_runs": [
+    "[MOCK SEARCH] Search results for 'Market reactions to [MOCK SUMMARIZE] Summary of '[MOCK EXTRACT] Extracted 'executive_summary_text' from '[MOCK EXTRACT] Extracted 'annual_report_link' from '[MOCK SEARCH] Search results for 'Find the official URL for Project Nexus'''''",
+    "[MOCK SEARCH] Search results for 'Market reactions to [MOCK SUMMARIZE] Summary of '[MOCK EXTRACT] Extracted 'executive_summary_text' from '[MOCK EXTRACT] Extracted 'annual_report_link' from '[MOCK SEARCH] Search results for 'Find the official URL for Project Nexus'''''",
+    "[MOCK SEARCH] Search results for 'Market reactions to [MOCK SUMMARIZE] Summary of '[MOCK EXTRACT] Extracted 'executive_summary_text' from '[MOCK EXTRACT] Extracted 'annual_report_link' from '[MOCK SEARCH] Search results for 'Find the official URL for Project Nexus'''''",
+    "[MOCK SEARCH] Search results for 'Market reactions to [MOCK SUMMARIZE] Summary of '[MOCK EXTRACT] Extracted 'executive_summary_text' from '[MOCK EXTRACT] Extracted 'annual_report_link' from '[MOCK SEARCH] Search results for 'Find the official URL for Project Nexus'''''",
+    "[MOCK SEARCH] Search results for 'Market reactions to [MOCK SUMMARIZE] Summary of '[MOCK EXTRACT] Extracted 'executive_summary_text' from '[MOCK EXTRACT] Extracted 'annual_report_link' from '[MOCK SEARCH] Search results for 'Find the official URL for Project Nexus'''''"
+  ],
+  "exact_match": true
+}
