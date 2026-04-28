@@ -18,7 +18,7 @@ pip install -e ".[dev]"
 3. Configure environment variables (`.env` in repo root):
 
 ```bash
-OPENAI_API_KEY=your_key_here
+GOOGLE_API_KEY=your_key_here
 # Optional:
 # DB_PATH=db.sqlite
 ```
